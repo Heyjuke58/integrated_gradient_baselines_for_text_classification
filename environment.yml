@@ -1,0 +1,12 @@
+name: iml-project
+channels:
+  - pytorch
+  - conda-forge
+  - huggingface
+dependencies:
+  - python=3.9
+  - pytorch=1.10
+  - cudatoolkit=11.3
+  - transformers=4.16.1
+  - datasets=1.18.2
+  - captum=0.4.1
