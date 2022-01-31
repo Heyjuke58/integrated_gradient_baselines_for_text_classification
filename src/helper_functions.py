@@ -3,6 +3,8 @@ import torch
 def construct_word_embedding(model, model_str, input_ids):
     return model.distilbert.embeddings.word_embeddings(input_ids)
 
+def get_word_embeddings(model):
+	return model.distilbert.embeddings.word_embeddings.weight
 
 def predict(model, inputs_embeds, attention_mask=None):
     return model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)[0]
