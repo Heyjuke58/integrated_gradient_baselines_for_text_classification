@@ -1,38 +1,39 @@
-import pickle
 import argparse
+import pickle
+
 from sklearn.neighbors import kneighbors_graph
-from transformers import AutoTokenizer
-import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from src.helper_functions import get_word_embeddings
 from src.parse_arguments import MODEL_STRS
 
 
 def main(args):
-	device = torch.device("cpu")
 
-	print(f'Starting KNN computation..')
+    print(f"Starting KNN computation..")
 
-	tokenizer = AutoTokenizer.from_pretrained(MODEL_STRS[args.nn])
-	
-	word_features		= get_word_embeddings().cpu().detach().numpy()
-	word_idx_map		= tokenizer.get_vocab()
-	A					= kneighbors_graph(word_features, args.nbrs, mode='distance', n_jobs=args.procs)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        MODEL_STRS[args.model], return_dict=False
+    )
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_STRS[args.model])
 
-	knn_fname = f'processed/knns/{args.nn}_{args.dataset}_{args.nbrs}.pkl'
-	with open(knn_fname, 'wb') as f:
-		pickle.dump([word_idx_map, word_features, A], f)
+    word_features = get_word_embeddings(model, args.model).cpu().detach().numpy()
+    word_idx_map = tokenizer.get_vocab()
+    A = kneighbors_graph(word_features, args.neighbors, mode="distance", n_jobs=args.processes)
 
-	print(f'Written KNN data at {knn_fname}')
+    knn_fname = f"knn/{args.model}_{args.neighbors}.pkl"
+    with open(knn_fname, "wb") as f:
+        pickle.dump([word_idx_map, word_features, A], f)
+
+    print(f"Written KNN data at {knn_fname}")
 
 
-if __name__ == '__main__':
-	parser = argparse.ArgumentParser(description='knn')
-	parser.add_argument('-nn',    	default='distilbert', choices=['distilbert', 'bert'], dest='nn')
-	parser.add_argument('-dataset', default='sst2', choices=['sst2', 'imdb', 'rotten'])
-	parser.add_argument('-procs',	default=40, type=int)
-	parser.add_argument('-nbrs',  	default=500, type=int)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="knn")
+    parser.add_argument("-m", default="distilbert", choices=["distilbert", "bert"], dest="model")
+    parser.add_argument("--processes", default=40, type=int, dest="processes")
+    parser.add_argument("--neighbors", default=500, type=int, dest="neighbors")
 
-	args = parser.parse_args()
+    args = parser.parse_args()
 
-	main(args)
+    main(args)

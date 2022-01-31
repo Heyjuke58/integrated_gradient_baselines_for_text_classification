@@ -10,3 +10,5 @@ dependencies:
   - transformers=4.16.1
   - datasets=1.18.2
   - captum=0.4.1
+  - scikit-learn=1.0.2
+  - parameterized=0.8.1
