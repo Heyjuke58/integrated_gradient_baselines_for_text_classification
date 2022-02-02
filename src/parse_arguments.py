@@ -1,5 +1,5 @@
 import argparse
-from typing import List, Dict, Any, Tuple
+from typing import Any, Dict, List, Tuple
 
 MODEL_STRS = {
     # https://huggingface.co/textattack/bert-base-uncased-SST-2
@@ -56,10 +56,10 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         args.models, possible_values=list(MODEL_STRS.keys()), arg_type="models"
     )
 
-    baselines = lookup_string(BASELINE_STRS, args.baselines)
+    # baselines = lookup_string(BASELINE_STRS, args.baselines)
     # models = lookup_string(MODEL_STRS, args.models)
 
-    return (args.examples, baselines, args.models)
+    return (args.examples, args.baselines, args.models)
 
 
 # parse string into list of strings. Check that each string is an allowed value.

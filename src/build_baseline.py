@@ -1,8 +1,10 @@
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-from torch import Tensor
-import torch
-from src.helper_functions import construct_word_embedding
 from typing import Optional
+
+import torch
+from torch import Tensor
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+from src.helper_functions import construct_word_embedding
 from src.parse_arguments import BASELINE_STRS
 
 EMB_STATS = {
@@ -47,12 +49,12 @@ class BaselineBuilder:
         assert (
             input_emb.shape[0] == 1
         ), f"Input embedding should have a shape of (1, tokens, embedding size). Instead it has {input_emb.shape}"
-        assert (
-            input_emb[0, 0] == self.cls_emb
+        assert torch.equal(
+            input_emb[0, 0], self.cls_emb
         ), "First embedding of input does not match cls token embedding."
         sep_idx = 0
         for i, row in enumerate(input_emb[0]):
-            if torch.eq(row, self.sep_emb):
+            if torch.equal(row, self.sep_emb):
                 sep_idx = i
         assert (
             input_emb[0, sep_idx] == self.sep_emb and sep_idx != 0
