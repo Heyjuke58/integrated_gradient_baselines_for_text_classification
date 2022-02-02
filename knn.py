@@ -6,6 +6,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from src.helper_functions import get_word_embeddings
 from src.parse_arguments import MODEL_STRS
+from pathlib import Path
 
 
 def main(args):
@@ -21,6 +22,7 @@ def main(args):
     word_idx_map = tokenizer.get_vocab()
     A = kneighbors_graph(word_features, args.neighbors, mode="distance", n_jobs=args.processes)
 
+    Path("knn").mkdir(parents=True, exist_ok=True)
     knn_fname = f"knn/{args.model}_{args.neighbors}.pkl"
     with open(knn_fname, "wb") as f:
         pickle.dump([word_idx_map, word_features, A], f)

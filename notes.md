@@ -11,6 +11,7 @@ aus dem artikel:
 - blurred embedding: nimm embedding vom satz, wende gaussian blur darauf an (embeddings der wörter werden ähnlicher)
 - uniform: random embeddings
 - gaussian: random embeddings um die originalen embeddings herum
+  - diskretisieren macht hier wohl keinen sinn
 
 aus dem DIG paper:
 - pad token
@@ -19,3 +20,4 @@ aus dem DIG paper:
 - zero embedding
 - average word embedding: durchschnitt aller embeddings aus dem vocabulary (möglicherweise gewichtet nach word frequency?)
 - average word: wie average word embedding, aber suche von dort aus das nächste echte wort
+- random word: take for each token a random word embedding

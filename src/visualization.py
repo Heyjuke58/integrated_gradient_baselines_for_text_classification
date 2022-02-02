@@ -2,22 +2,24 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch import Tensor
-from typing import List, Optional
+from typing import List, Optional, Dict
 from numpy import ndarray
 from pathlib import Path
 
 
-def visualize_attrs(attrs: ndarray, token_words: List[str], save_str: Optional[str] = None):
+def visualize_attrs(bl_attrs: Dict[str, ndarray], token_words: List[str], save_str: Optional[str] = None):
     """makes bar charts that show how important each token-word is"""
-    assert len(attrs) == len(token_words)
-    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
-    fake_x = range(len(token_words))
+    # assert len(attrs) == len(token_words)
+    num_bbs = len(bl_attrs)
+    fig, axs = plt.subplots(num_bbs, 1, sharex=True, squeeze=False, figsize=(8, 4))
+    x_indices = range(len(token_words))
 
-    ax.bar(fake_x, attrs)
-    ax.set_xticks(fake_x)
-    # ax.set_yticks(token_words)
-    ax.set_xticklabels(token_words)
-    # ax.set_ylabel("F1", fontsize=16)
+    for i, (bl_name, attrs) in enumerate(bl_attrs.values()):
+        axs[i].bar(x_indices, attrs)
+        axs[i].set_xticks(x_indices)
+        # ax.set_yticks(token_words)
+        axs[i].set_xticklabels(token_words)
+        axs[i].set_ylabel(bl_name, fontsize=16)
 
     plt.tight_layout()
     if save_str is not None:

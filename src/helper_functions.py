@@ -1,4 +1,5 @@
 import torch
+import pickle
 
 
 def construct_word_embedding(model, model_str, input_ids):
@@ -12,6 +13,12 @@ def get_word_embeddings(model, model_str):
 def predict(model, inputs_embeds, attention_mask=None):
     return model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)[0]
 
+def load_mappings(model_str, knn_nbrs=500):
+    with open(f'knn/{model_str}_{knn_nbrs}.pkl', 'rb') as f:
+        [word_idx_map, word_features, adj] = pickle.load(f)
+    word_idx_map = dict(word_idx_map)
+
+    return word_idx_map, word_features, adj
 
 def nn_forward_fn(
     model,

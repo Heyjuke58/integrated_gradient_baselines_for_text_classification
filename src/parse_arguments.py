@@ -35,7 +35,7 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         "--baselines",
         type=str,
         dest="baselines",
-        default="pad_token",
+        default="furthest_embedding",
         help="Type of baseline to be used for Integrated Gradients.",
     )
     parser.add_argument(
@@ -45,6 +45,22 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         dest="models",
         default="distilbert,bert",
         help="Models that should be interpreted.",
+    )
+    parser.add_argument(
+        "-v",
+        "--version-ig",
+        type=str,
+        dest="version_ig",
+        default="ig",
+        help="Which version auf IG should be used (vanilla 'ig' or discretized 'dig').",
+    )
+    parser.add_argument(
+        "-s",
+        "--steps",
+        type=int,
+        dest="steps",
+        default=30,
+        help="Number of interpolation steps for IG.",
     )
 
     args = parser.parse_args()
@@ -59,7 +75,7 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
     # baselines = lookup_string(BASELINE_STRS, args.baselines)
     # models = lookup_string(MODEL_STRS, args.models)
 
-    return (args.examples, args.baselines, args.models)
+    return (args.examples, args.baselines, args.models, args.version_ig, args.steps)
 
 
 # parse string into list of strings. Check that each string is an allowed value.
