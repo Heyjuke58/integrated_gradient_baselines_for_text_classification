@@ -1,14 +1,29 @@
 import torch
 import pickle
+from captum.attr._utils.approximation_methods import approximation_parameters
 
 
 def construct_word_embedding(model, model_str, input_ids):
     return getattr(model, model_str).embeddings.word_embeddings(input_ids)
 
-
 def get_word_embeddings(model, model_str):
     return getattr(model, model_str).embeddings.word_embeddings.weight
 
+def get_token_id_from_embedding(model, model_str, embedding):
+    for i, word_embed in enumerate(get_word_embeddings(model, model_str)):
+        if torch.equal(word_embed, embedding):
+            return i
+    raise KeyError("Embedding does not correspond to a token known in the vocabulary.")
+
+def get_closest_by_token_id_for_embedding(model, model_str, embedding):
+    min_dist = float("inf")
+    token_id = None
+    for i, word_embed in enumerate(get_word_embeddings(model, model_str)):
+        dist = torch.cdist(word_embed, embedding)**2
+        if dist < min_dist:
+            min_dist = dist
+            token_id = i
+    return token_id
 
 def predict(model, inputs_embeds, attention_mask=None):
     return model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)[0]

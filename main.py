@@ -12,15 +12,22 @@ from src.helper_functions import (
     get_word_embeddings,
     nn_forward_fn,
     load_mappings,
+    get_token_id_from_embedding,
 )
 from src.parse_arguments import MODEL_STRS, parse_arguments
 from src.visualization import embedding_histogram, visualize_attrs
 from src.dig import DiscretetizedIntegratedGradients
 from src.monotonic_paths import scale_inputs
+from src.custom_ig import CustomIntegratedGradients
 
 
 def main(
-    examples: List[int], baselines: List[str], models: List[str], version_ig: str, steps: int
+    examples: List[int],
+    baselines: List[str],
+    models: List[str],
+    version_ig: str,
+    steps: int,
+    seed: int,
 ) -> None:
     """
     :param examples: list of indices for samples from the sst2 validation set to be classified and explained.
@@ -46,7 +53,9 @@ def main(
 
         # choose IG version
         if version_ig == "ig":
-            ig: IntegratedGradients = IntegratedGradients(partial(nn_forward_fn, model, model_str))
+            ig: CustomIntegratedGradients = CustomIntegratedGradients(
+                partial(nn_forward_fn, model, model_str)
+            )
         elif version_ig == "dig":
             # TODO: add DIG
             ig: DiscretetizedIntegratedGradients = DiscretetizedIntegratedGradients(
@@ -55,44 +64,48 @@ def main(
             # get knn auxiliary data
             auxiliary_data = load_mappings(model_str)
 
-        x = dataset[examples]
-        input = tokenizer(x["sentence"], padding=True, return_tensors="pt")
-        words = tokenizer.convert_ids_to_tokens(list(map(int, input["input_ids"][0])))
-        formatted_input = (input["input_ids"], input["attention_mask"])
-        input_emb = construct_word_embedding(model, model_str, input["input_ids"])
+        for example in examples:
+            x = dataset[example]
+            input = tokenizer(x["sentence"], padding=True, return_tensors="pt")
+            input_ids = input["input_ids"][0]
+            words = tokenizer.convert_ids_to_tokens(list(map(int, input_ids)))
+            formatted_input = (input["input_ids"], input["attention_mask"])
+            input_emb = construct_word_embedding(model, model_str, input["input_ids"])
 
-        bb = BaselineBuilder(model, model_str, tokenizer)
-        bl_attrs = {}
-        for baseline_str in baselines:
-            print(f"BASELINE: {baseline_str}")
-            baseline = bb.build_baseline(input_emb, b_type=baseline_str)
+            bl_attrs = {}
+            for baseline_str in baselines:
+                print(f"BASELINE: {baseline_str}")
+                bb = BaselineBuilder(model, model_str, tokenizer, seed)
+                baseline = bb.build_baseline(input_emb, b_type=baseline_str)
 
-            if version_ig == "ig":
-                # attributions for a batch of sentences
-                attrs = ig.attribute(inputs=input_emb, baselines=baseline)
-            elif version_ig == "dig":
-                # attributions for one single sentence
-                attrs = []
-                for input_example, baseline_example in zip(input_emb, baseline):
-                    # TODO: either: adapt scale_inputs to correctly build path from baseline embedding
-                    # TODO: or: get baseline token ids from baseline embedding
-                    scaled_features = scale_inputs(
-                        input_example,
-                        baseline_example,
+                if version_ig == "ig":
+                    # attributions for a batch of sentences
+                    (attrs,), (word_paths,) = ig._attribute(
+                        inputs=input_emb, baselines=baseline, n_steps=steps
+                    )
+                elif version_ig == "dig":
+                    # attributions for one single sentence
+                    attrs = []
+                    baseline_ids = [
+                        get_token_id_from_embedding(model, model_str, base_emb)
+                        for base_emb in baseline[0]
+                    ]
+                    scaled_features, word_paths = scale_inputs(
+                        input_ids,
+                        baseline_ids,
                         device,
                         auxiliary_data,
-                        steps=steps,
+                        steps=steps - 2,
                         strategy="greedy",
                     )
                     # TODO: maybe add additional forward args to attribute
-                    attr = ig.attribute(scaled_features=scaled_features, n_steps=steps)
-                    attrs.append(attr)
-                attrs = torch.cat(attrs, dim=0)
-            summed_attrs = torch.sum(torch.abs(attrs), dim=2).squeeze(0)
-            bl_attrs[baseline_str] = summed_attrs.detach().numpy()
+                    attrs = ig.attribute(scaled_features=scaled_features, n_steps=steps)
 
-        # visualize_attrs(summed_attrs.detach().numpy(), words, save_str=model_str + "_absolute")
-        visualize_attrs(bl_attrs, words)
+                summed_attrs = torch.sum(torch.abs(attrs), dim=2).squeeze(0)
+                bl_attrs[baseline_str] = summed_attrs.detach().numpy()
+
+            # visualize_attrs(summed_attrs.detach().numpy(), words, save_str=model_str + "_absolute")
+            visualize_attrs(bl_attrs, words)
 
 
 if __name__ == "__main__":

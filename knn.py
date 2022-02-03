@@ -13,26 +13,28 @@ def main(args):
 
     print(f"Starting KNN computation..")
 
-    model = AutoModelForSequenceClassification.from_pretrained(
-        MODEL_STRS[args.model], return_dict=False
-    )
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_STRS[args.model])
+    model_strs = args.models.split(",")
+    for model_str in model_strs:
+        model = AutoModelForSequenceClassification.from_pretrained(
+            MODEL_STRS[model_str], return_dict=False
+        )
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_STRS[model_str])
 
-    word_features = get_word_embeddings(model, args.model).cpu().detach().numpy()
-    word_idx_map = tokenizer.get_vocab()
-    A = kneighbors_graph(word_features, args.neighbors, mode="distance", n_jobs=args.processes)
+        word_features = get_word_embeddings(model, model_str).cpu().detach().numpy()
+        word_idx_map = tokenizer.get_vocab()
+        A = kneighbors_graph(word_features, args.neighbors, mode="distance", n_jobs=args.processes)
 
-    Path("knn").mkdir(parents=True, exist_ok=True)
-    knn_fname = f"knn/{args.model}_{args.neighbors}.pkl"
-    with open(knn_fname, "wb") as f:
-        pickle.dump([word_idx_map, word_features, A], f)
+        Path("knn").mkdir(parents=True, exist_ok=True)
+        knn_fname = f"knn/{model_str}_{args.neighbors}.pkl"
+        with open(knn_fname, "wb") as f:
+            pickle.dump([word_idx_map, word_features, A], f)
 
-    print(f"Written KNN data at {knn_fname}")
+        print(f"Written KNN data at {knn_fname}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="knn")
-    parser.add_argument("-m", default="distilbert", choices=["distilbert", "bert"], dest="model")
+    parser.add_argument("-m", default="distilbert,bert", type=str, dest="models")
     parser.add_argument("--processes", default=40, type=int, dest="processes")
     parser.add_argument("--neighbors", default=500, type=int, dest="neighbors")
 

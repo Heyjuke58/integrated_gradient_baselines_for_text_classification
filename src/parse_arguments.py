@@ -9,14 +9,16 @@ MODEL_STRS = {
     # "sshleifer": "sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english",
 }
 BASELINE_STRS = {
-    "pad_token",
-    "furthest_embedding",
-    "blurred_embedding",
+    "pad_embed",
+    "furthest_embed",
+    "blurred_embed",
+    "flipped_blurred_embed",
+    "both_blurred_embed",
     "uniform",
     "gaussian",
     "furthest_word",
-    "average_word_embedding",
-    "average_word",
+    "avg_word_embed",
+    "avg_word",
 }
 
 
@@ -27,7 +29,7 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         "--examples",
         type=str,
         dest="examples",
-        default="0,1,2,3",
+        default="0,1",
         help="Example indices used for IG evaluation.",
     )
     parser.add_argument(
@@ -35,7 +37,8 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         "--baselines",
         type=str,
         dest="baselines",
-        default="furthest_embedding",
+        # default="furthest_embed,pad_embed,blurred_embed,flipped_blurred_embed",
+        default="blurred_embed,flipped_blurred_embed,both_blurred_embed",
         help="Type of baseline to be used for Integrated Gradients.",
     )
     parser.add_argument(
@@ -55,12 +58,18 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         help="Which version auf IG should be used (vanilla 'ig' or discretized 'dig').",
     )
     parser.add_argument(
-        "-s",
         "--steps",
         type=int,
         dest="steps",
-        default=30,
+        default=32,
         help="Number of interpolation steps for IG.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        dest="seed",
+        default=33,  # super max
+        help="Seed to be used for baselines that use a randomizer.",
     )
 
     args = parser.parse_args()
@@ -75,7 +84,7 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
     # baselines = lookup_string(BASELINE_STRS, args.baselines)
     # models = lookup_string(MODEL_STRS, args.models)
 
-    return (args.examples, args.baselines, args.models, args.version_ig, args.steps)
+    return (args.examples, args.baselines, args.models, args.version_ig, args.steps, args.seed)
 
 
 # parse string into list of strings. Check that each string is an allowed value.

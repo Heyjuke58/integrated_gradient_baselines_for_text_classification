@@ -172,10 +172,12 @@ def scale_inputs(
     word_idx_map, word_features, adj = auxiliary_data
 
     all_path_embs = []
+    word_paths = []
     for idx in range(len(input_ids)):
         word_path = find_word_path(
             input_ids[idx], ref_input_ids[idx], word_idx_map, word_features, adj, steps=steps, strategy=strategy
         )
+        word_paths.append(word_path)
         monotonic_embs = make_monotonic_path(
             word_path, ref_input_ids[idx], word_features, steps=steps, factor=factor
         )
@@ -184,4 +186,4 @@ def scale_inputs(
         np.stack(all_path_embs, axis=1), dtype=torch.float, device=device, requires_grad=True
     )
 
-    return all_path_embs
+    return all_path_embs, word_paths
