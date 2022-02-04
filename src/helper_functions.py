@@ -3,11 +3,17 @@ import pickle
 from captum.attr._utils.approximation_methods import approximation_parameters
 
 
+def stringify_label(label: int) -> str:
+    return "positive" if label == 1 else "negative"
+
+
 def construct_word_embedding(model, model_str, input_ids):
     return getattr(model, model_str).embeddings.word_embeddings(input_ids)
 
+
 def get_word_embeddings(model, model_str):
     return getattr(model, model_str).embeddings.word_embeddings.weight
+
 
 def get_token_id_from_embedding(model, model_str, embedding):
     for i, word_embed in enumerate(get_word_embeddings(model, model_str)):
@@ -15,25 +21,29 @@ def get_token_id_from_embedding(model, model_str, embedding):
             return i
     raise KeyError("Embedding does not correspond to a token known in the vocabulary.")
 
+
 def get_closest_by_token_id_for_embedding(model, model_str, embedding):
     min_dist = float("inf")
     token_id = None
     for i, word_embed in enumerate(get_word_embeddings(model, model_str)):
-        dist = torch.cdist(word_embed, embedding)**2
+        dist = torch.cdist(word_embed, embedding) ** 2
         if dist < min_dist:
             min_dist = dist
             token_id = i
     return token_id
 
+
 def predict(model, inputs_embeds, attention_mask=None):
     return model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)[0]
 
+
 def load_mappings(model_str, knn_nbrs=500):
-    with open(f'knn/{model_str}_{knn_nbrs}.pkl', 'rb') as f:
+    with open(f"knn/{model_str}_{knn_nbrs}.pkl", "rb") as f:
         [word_idx_map, word_features, adj] = pickle.load(f)
     word_idx_map = dict(word_idx_map)
 
     return word_idx_map, word_features, adj
+
 
 def nn_forward_fn(
     model,

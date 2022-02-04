@@ -29,7 +29,7 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         "--examples",
         type=str,
         dest="examples",
-        default="0,1",
+        default="0,1,2",
         help="Example indices used for IG evaluation.",
     )
     parser.add_argument(
@@ -37,8 +37,8 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         "--baselines",
         type=str,
         dest="baselines",
-        # default="furthest_embed,pad_embed,blurred_embed,flipped_blurred_embed",
-        default="blurred_embed,flipped_blurred_embed,both_blurred_embed",
+        default="furthest_embed,pad_embed,blurred_embed,flipped_blurred_embed,both_blurred_embed,uniform,gaussian",
+        # default="blurred_embed,flipped_blurred_embed,both_blurred_embed",
         help="Type of baseline to be used for Integrated Gradients.",
     )
     parser.add_argument(
@@ -71,6 +71,20 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         default=33,  # super max
         help="Seed to be used for baselines that use a randomizer.",
     )
+    parser.add_argument(
+        "--viz-attr",
+        type=bool,
+        dest="viz_attr",
+        default=True,
+        help="Whether to visualize the summed attributions for every example.",
+    )
+    parser.add_argument(
+        "--viz-comp",
+        type=bool,
+        dest="viz_comp",
+        default=True,
+        help="Whether to visualize the comprehensiveness of attributions over all examples.",
+    )
 
     args = parser.parse_args()
     args.examples = list(map(int, args.examples.split(",")))
@@ -84,7 +98,16 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
     # baselines = lookup_string(BASELINE_STRS, args.baselines)
     # models = lookup_string(MODEL_STRS, args.models)
 
-    return (args.examples, args.baselines, args.models, args.version_ig, args.steps, args.seed)
+    return (
+        args.examples,
+        args.baselines,
+        args.models,
+        args.version_ig,
+        args.steps,
+        args.seed,
+        args.viz_attr,
+        args.viz_comp,
+    )
 
 
 # parse string into list of strings. Check that each string is an allowed value.

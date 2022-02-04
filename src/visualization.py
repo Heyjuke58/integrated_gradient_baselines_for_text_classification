@@ -7,10 +7,21 @@ from numpy import ndarray
 from pathlib import Path
 
 
-def visualize_attrs(bl_attrs: Dict[str, ndarray], token_words: List[str], save_str: Optional[str] = None):
+def visualize_attrs(
+    bl_attrs: Dict[str, ndarray],
+    prediction: str,
+    true_label: str,
+    model_str: str,
+    version_ig: str,
+    sentence: str,
+    token_words: List[str],
+    save_str: Optional[str] = None,
+):
     """makes bar charts that show how important each token-word is"""
     num_bbs = len(bl_attrs)
-    fig, axs = plt.subplots(num_bbs, 1, sharex=True, squeeze=False, figsize=(8, 4), gridspec_kw={"hspace": 0})
+    fig, axs = plt.subplots(
+        num_bbs, 1, sharex=True, squeeze=False, figsize=(16, 8), gridspec_kw={"hspace": 0}
+    )
     x_indices = range(len(token_words))
 
     # loop over different input sentences:
@@ -20,9 +31,17 @@ def visualize_attrs(bl_attrs: Dict[str, ndarray], token_words: List[str], save_s
         axs[i, 0].set_xticks(x_indices)
         # ax.set_yticks(token_words)
         axs[i, 0].set_xticklabels(token_words)
-        axs[i, 0].set_ylabel(bl_name, fontsize=16)
+        axs[i, 0].set_ylabel(bl_name, rotation=0, ha="right")
 
-    plt.tight_layout()
+    # axs[0, 0].set_title(f"{version_ig} for {model_str}")
+    fig.text(
+        0.5, 0.95, f"{version_ig} attributions for {model_str} model", ha="center", fontsize=16
+    )
+    plt.suptitle(
+        f"sentence: {sentence}\nTrue: {true_label}, Prediction: {prediction}",
+        y=0.05,
+    )
+    # plt.tight_layout()
     if save_str is not None:
         if not save_str.endswith(".png"):
             save_str += ".png"

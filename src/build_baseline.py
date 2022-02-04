@@ -46,7 +46,6 @@ class BaselineBuilder:
         self.emb_min = self.emb_mean - 2.58 * self.emb_std
         self.rngesus = torch.Generator().manual_seed(seed)
 
-
     def build_baseline(self, input_emb: Tensor, b_type: str) -> Tensor:
         """
         Constructs baseline embedding tensor from input embedding tensor shape: (sentences, tokens, embedding) for a given baseline method (b_type)
@@ -112,7 +111,7 @@ class BaselineBuilder:
         """
         Given a sentence embedding, return the furthest point in the embedding space from it.
         Bounds of the embedding space are found by using the sigma-surrounding to exclude extreme values.
-        
+
         Note: For all baseline methods like this one, the input_emb is required to be in the below specified format!
 
         :param input_embed: embeddings of words (not the surrounding cls, sep, or pad embeddings!)
@@ -136,13 +135,13 @@ class BaselineBuilder:
         """
         Words are independent, embeddings of each word are blurred.
         """
-        return gaussian_blur(input_emb.unsqueeze(0), kernel_size=[20, 1]).squeeze(0)
+        return gaussian_blur(input_emb.unsqueeze(0), kernel_size=[21, 1]).squeeze(0)
 
     def _both_blurred_embed(self, input_emb: Tensor) -> Tensor:
         """
         Everything is blurred.
         """
-        return gaussian_blur(input_emb.unsqueeze(0), kernel_size=[20, 3]).squeeze(0)
+        return gaussian_blur(input_emb.unsqueeze(0), kernel_size=[21, 3]).squeeze(0)
 
     def _pad_embed(self, input_emb: Tensor) -> Tensor:
         """
@@ -155,11 +154,17 @@ class BaselineBuilder:
         return baseline_emb
 
     def _uniform(self, input_emb: Tensor) -> Tensor:
-        return torch.FloatTensor(input_emb.shape).uniform_(self.emb_min, self.emb_max, generator=self.rngesus)
+        return torch.FloatTensor(input_emb.shape).uniform_(
+            self.emb_min, self.emb_max, generator=self.rngesus
+        )
 
     def _gaussian(self, input_emb: Tensor) -> Tensor:
         # return torch.FloatTensor(input_emb.shape).uniform_(self.emb_min, self.emb_max)
-        return torch.clamp(torch.normal(mean=input_emb, std=1, generator=self.rngesus), min=self.emb_min, max=self.emb_max)
+        return torch.clamp(
+            torch.normal(mean=input_emb, std=1, generator=self.rngesus),
+            min=self.emb_min,
+            max=self.emb_max,
+        )
 
     def _furthest_word(self, input_emb: Tensor) -> Tensor:
         raise NotImplementedError
