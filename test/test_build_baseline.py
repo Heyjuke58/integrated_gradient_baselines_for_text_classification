@@ -1,6 +1,6 @@
 import unittest
 from parameterized import parameterized_class
-from src.build_baseline import BaselineBuilder
+from src.baseline_builder import BaselineBuilder
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from src.parse_arguments import MODEL_STRS, BASELINE_STRS
 from src.helper_functions import construct_word_embedding
@@ -11,8 +11,6 @@ import torch
 @parameterized_class([{"model_str": "distilbert"}, {"model_str": "bert"}])
 class TestBaselineBuilder(unittest.TestCase):
     def setUp(self) -> None:
-        # model_str = "distilbert"  # TODO test both models always
-        print(self.model_str)
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_STRS[self.model_str])
         self.model = AutoModelForSequenceClassification.from_pretrained(
             MODEL_STRS[self.model_str], return_dict=False

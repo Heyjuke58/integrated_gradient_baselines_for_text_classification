@@ -3,11 +3,10 @@ from typing import List, Dict
 from collections import defaultdict
 
 import torch
-from captum.attr import IntegratedGradients
 from datasets.load import load_dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from src.build_baseline import BaselineBuilder
+from src.baseline_builder import BaselineBuilder
 from src.helper_functions import (
     construct_word_embedding,
     get_word_embeddings,
@@ -18,11 +17,14 @@ from src.helper_functions import (
     stringify_label,
 )
 from src.parse_arguments import MODEL_STRS, parse_arguments
-from src.visualization import embedding_histogram, visualize_attrs
+from src.visualization import embedding_histogram, visualize_attrs, visualize_ablation_scores
 from src.dig import DiscretetizedIntegratedGradients
 from src.monotonic_paths import scale_inputs
 from src.custom_ig import CustomIntegratedGradients
-from src.ablation_evaluation import calculate_suff, calculate_comp
+from src.ablation_evaluation import calculate_suff, calculate_comp, get_avg_scores
+
+# K's for TopK ablation tests
+K = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 
 def main(
@@ -41,8 +43,9 @@ def main(
     :param models: keys for MODEL_STRS. What models should be used for classification and to be explained.
     """
     dataset = load_dataset("glue", "sst2", split="validation")
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = "cpu"
+    dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(dev)
+
 
     for model_str in models:
         print(f"MODEL: {model_str}")
@@ -50,7 +53,7 @@ def main(
         tokenizer = AutoTokenizer.from_pretrained(MODEL_STRS[model_str])
         model = AutoModelForSequenceClassification.from_pretrained(
             MODEL_STRS[model_str], return_dict=False
-        )
+        ).to(dev)
 
         # plot histogram
         # all_word_embeddings = get_word_embeddings(model, model_str)
@@ -89,7 +92,7 @@ def main(
             input_ids = input["input_ids"][0]
             words = tokenizer.convert_ids_to_tokens(list(map(int, input_ids)))
             # formatted_input = (input["input_ids"], input["attention_mask"])
-            input_emb = construct_word_embedding(model, model_str, input["input_ids"])
+            input_emb = construct_word_embedding(model, model_str, input["input_ids"]).to(dev)
             true_label = stringify_label(x["label"])
             prediction = predict(model, input_emb, input["attention_mask"])
             prediction_str = stringify_label(torch.argmax(prediction).item())
@@ -98,7 +101,7 @@ def main(
             for baseline_str in baselines:
                 print(f"BASELINE: {baseline_str}")
                 bb = BaselineBuilder(model, model_str, tokenizer, seed)
-                baseline = bb.build_baseline(input_emb, b_type=baseline_str)
+                baseline = bb.build_baseline(input_emb, b_type=baseline_str).to(dev)
 
                 if version_ig == "ig":
                     # attributions for a batch of sentences
@@ -115,33 +118,33 @@ def main(
                     scaled_features, word_paths = scale_inputs(
                         input_ids,
                         baseline_ids,
-                        device,
+                        dev,
                         auxiliary_data,
                         steps=steps - 2,
                         strategy="greedy",
                     )
                     # TODO: maybe add additional forward args to attribute
                     attrs = ig.attribute(scaled_features=scaled_features, n_steps=steps)
+                else:
+                    raise Exception("?????")
 
                 summed_attrs = torch.sum(torch.abs(attrs), dim=2).squeeze(0)
                 bl_attrs[baseline_str] = summed_attrs.detach().numpy()
 
             if viz_comp:
                 for baseline_str, attr in bl_attrs.items():
-                    for k in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
+                    for k in K:
                         comps[baseline_str][k].append(
                             calculate_comp(
                                 torch.tensor(attr),
                                 k,
                                 bb.pad_emb,
                                 model,
-                                input_emb,
+                                input_emb.detach().cpu(),
                                 input["attention_mask"],
                                 prediction,
                             )
                         )
-
-            # visualize_attrs(summed_attrs.detach().numpy(), words, save_str=model_str + "_absolute")
             if viz_attr:
                 visualize_attrs(
                     bl_attrs,
@@ -153,8 +156,8 @@ def main(
                     words,
                 )
         if viz_comp:
-            # visualize_comps(comps)
-            pass
+            avg_comps: Dict[str, Dict[float, float]] = get_avg_scores(comps)
+            visualize_ablation_scores(avg_comps, model_str, 'comprehensiveness', len(examples), save_str=None)
 
 
 if __name__ == "__main__":

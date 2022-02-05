@@ -30,7 +30,7 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         type=str,
         dest="examples",
         default="0,1,2",
-        help="Example indices used for IG evaluation.",
+        help="Example indices used for IG evaluation. Can either be specified by ints seperated by ',' for explicit examples or be a range i.e. the first 1000 examples: -e \"0-1000\" ",
     )
     parser.add_argument(
         "-b",
@@ -72,22 +72,28 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         help="Seed to be used for baselines that use a randomizer.",
     )
     parser.add_argument(
-        "--viz-attr",
-        type=bool,
+        "--no-viz-attr",
         dest="viz_attr",
-        default=True,
+        action="store_false",
         help="Whether to visualize the summed attributions for every example.",
     )
+    parser.set_defaults(viz_attr=True)
     parser.add_argument(
-        "--viz-comp",
-        type=bool,
+        "--no-viz-comp",
         dest="viz_comp",
-        default=True,
+        action="store_false",
         help="Whether to visualize the comprehensiveness of attributions over all examples.",
     )
+    parser.set_defaults(viz_comp=True)
 
     args = parser.parse_args()
-    args.examples = list(map(int, args.examples.split(",")))
+    if "-" in args.examples:
+        assert "," not in args.examples
+        start, end = args.examples.split("-")
+        args.examples = list(range(int(start), int(end)))
+    else:
+        args.examples = list(map(int, args.examples.split(",")))
+
     args.baselines = valid_parse(
         args.baselines, possible_values=list(BASELINE_STRS), arg_type="baselines"
     )

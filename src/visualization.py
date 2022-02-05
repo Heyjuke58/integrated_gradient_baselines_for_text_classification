@@ -16,7 +16,7 @@ def visualize_attrs(
     sentence: str,
     token_words: List[str],
     save_str: Optional[str] = None,
-):
+) -> None:
     """makes bar charts that show how important each token-word is"""
     num_bbs = len(bl_attrs)
     fig, axs = plt.subplots(
@@ -37,10 +37,7 @@ def visualize_attrs(
     fig.text(
         0.5, 0.95, f"{version_ig} attributions for {model_str} model", ha="center", fontsize=16
     )
-    plt.suptitle(
-        f"sentence: {sentence}\nTrue: {true_label}, Prediction: {prediction}",
-        y=0.05,
-    )
+    plt.suptitle(f"sentence: {sentence}\nTrue: {true_label}, Prediction: {prediction}", y=0.05)
     # plt.tight_layout()
     if save_str is not None:
         if not save_str.endswith(".png"):
@@ -50,7 +47,7 @@ def visualize_attrs(
         plt.show()
 
 
-def embedding_histogram(embeddings: Tensor):
+def embedding_histogram(embeddings: Tensor) -> None:
     flattened = torch.flatten(embeddings).detach().cpu().numpy()
     print(f"{np.min(flattened)=}")
     print(f"{np.max(flattened)=}")
@@ -60,3 +57,33 @@ def embedding_histogram(embeddings: Tensor):
     ax.hist(flattened, bins=1000)
     plt.tight_layout()
     plt.show()
+
+
+def visualize_ablation_scores(
+    avg_scores: Dict[str, Dict[float, float]],
+    model_str: str,
+    ablation_str: str,
+    num_examples: int,
+    save_str: Optional[str] = None,
+) -> None:
+    num_bbs = len(list(avg_scores.keys()))
+    fig, ax = plt.subplots(
+        1, 1, sharex=True, figsize=(16, 8), gridspec_kw={"hspace": 0}
+    )
+    for i, (bl_name, scores) in enumerate(avg_scores.items()):
+        x = list(scores.keys())
+        y = list(scores.values())
+        ax.plot(x, y, label=bl_name)
+        # ax.set_ylabel(bl_name, rotation=0, ha="right")
+    ax.set_xticks(list(list(avg_scores.values())[0].keys()))
+    # ax.set_yticks(np.arange(0, 1.1, 0.1))
+    ax.legend()
+
+    plt.suptitle(f"TopK ablation of {num_examples} examples for {model_str} model: {ablation_str}", y=0.05)
+
+    if save_str is not None:
+        if not save_str.endswith(".png"):
+            save_str += ".png"
+        plt.savefig(Path("figures") / Path(save_str))
+    else:
+        plt.show()
