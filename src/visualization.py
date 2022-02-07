@@ -26,18 +26,19 @@ def visualize_attrs(
         num_bbs, 1, sharex=True, squeeze=False, figsize=(16, 8), gridspec_kw={"hspace": 0}
     )
     x_indices = range(len(token_words))
-    pal = sns.color_palette("bwr", len(token_words))
+    # pal = sns.color_palette("BuGn", len(token_words))
+    pal = sns.color_palette("summer", len(token_words))
 
     # loop over different input sentences:
     # for j in range(bl_attrs.values()[0].shape[0]):
     for i, (bl_name, attrs) in enumerate(bl_attrs.items()):
         df = pd.DataFrame(attrs, columns=["attr"])
-        rank = df.rank(axis=0)
+        rank = df.rank(axis=0, method='min', ascending=False)["attr"].to_numpy(dtype=np.int8)
         sns.barplot(
             x=df.index,
             y="attr",
             data=df,
-            palette=np.array(pal[::-1])[rank],
+            palette=np.array(pal[::1])[rank],
             # hue="attr",
             ax=axs[i, 0],
             orient="v",
