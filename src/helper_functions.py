@@ -1,6 +1,7 @@
 import torch
 import pickle
 from captum.attr._utils.approximation_methods import approximation_parameters
+from functools import cache
 
 
 def stringify_label(label: int) -> str:
@@ -15,6 +16,7 @@ def get_word_embeddings(model, model_str):
     return getattr(model, model_str).embeddings.word_embeddings.weight
 
 
+@cache
 def get_token_id_from_embedding(model, model_str, embedding):
     for i, word_embed in enumerate(get_word_embeddings(model, model_str)):
         if torch.equal(word_embed, embedding):

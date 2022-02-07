@@ -21,7 +21,7 @@ def calculate_comp(
     prediction: Tensor,
 ) -> float:
     """
-    Comprehensiveness scoring of an attribution.
+    Comprehensiveness scoring of an attribution. Higher is better.
 
     :param attr: Attribution scores for one sentence
     :param k: top-k value (how many embeddings are replaced)
@@ -32,14 +32,14 @@ def calculate_comp(
     """
     # get logits of masked prediction:
     replaced_embed = replace_k_percent(attr, k, replacement_emb, input_emb)
-    new_pred = predict(model, replaced_embed, attention_mask).squeeze(0)
+    new_pred = predict(model, replaced_embed, attention_mask)
 
     # convert logits of (original) prediction and new_prediction to probabilities:
-    new_pred = softmax(new_pred, dim=0)
-    prediction = softmax(prediction, dim=0)
+    new_pred = softmax(new_pred, dim=1)
+    prediction = softmax(prediction, dim=1)
 
     pred_i = torch.argmax(prediction).item()
-    return (new_pred[pred_i] - torch.max(prediction)).item()
+    return (torch.max(prediction) - new_pred[0, pred_i]).item()
 
 
 def calculate_log_odds(
@@ -63,21 +63,21 @@ def calculate_log_odds(
     """
     # get logits of masked prediction:
     replaced_embed = replace_k_percent(attr, k, replacement_emb, input_emb)
-    new_pred = predict(model, replaced_embed, attention_mask).squeeze(0)
+    new_pred = predict(model, replaced_embed, attention_mask)
 
     # convert logits of (original) prediction and new_prediction to probabilities:
-    new_pred = softmax(new_pred, dim=0)
-    prediction = softmax(prediction, dim=0)
+    new_pred = softmax(new_pred, dim=1)
+    prediction = softmax(prediction, dim=1)
 
     pred_i = torch.argmax(prediction).item()
-    return torch.log(new_pred[pred_i] / torch.max(prediction)).item()
+    return torch.log(new_pred[0, pred_i] / torch.max(prediction)).item()
 
 
 def replace_k_percent(attr: Tensor, k: float, replacement_emb: Tensor, input_emb: Tensor) -> Tensor:
     """
     Given a sentence embedding (without padding tokens at the end) and an attribution scoring over the tokens,
     replace the top-k embeddings with the replacement embedding.
-    
+
     :param attr: Attribution scores for one sentence
     :param k: top-k value (how many embeddings are replaced)
     :param replacement_emb: embedding for one word that should be used as replacement
@@ -109,5 +109,5 @@ def get_avg_scores(scores: Dict[str, Dict[float, List[float]]]) -> Dict[str, Dic
     for baseline_str in scores.keys():
         for k in scores[baseline_str].keys():
             avg_comps[baseline_str][k] = np.mean(scores[baseline_str][k])
-    
+
     return avg_comps

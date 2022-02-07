@@ -16,7 +16,7 @@ from captum.attr._utils.attribution import GradientAttribution
 from captum.attr._utils.common import _reshape_and_sum, _format_input
 
 
-class DiscretetizedIntegratedGradients(GradientAttribution):
+class DiscretizedIntegratedGradients(GradientAttribution):
     def __init__(self, forward_func: Callable, multiply_by_inputs: bool = True) -> None:
         GradientAttribution.__init__(self, forward_func)
         self._multiply_by_inputs = multiply_by_inputs
@@ -96,4 +96,3 @@ class DiscretetizedIntegratedGradients(GradientAttribution):
         )
 
         return attributions
-

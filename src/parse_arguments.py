@@ -79,12 +79,12 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
     )
     parser.set_defaults(viz_attr=True)
     parser.add_argument(
-        "--no-viz-comp",
-        dest="viz_comp",
+        "--no-viz-topk",
+        dest="viz_topk",
         action="store_false",
-        help="Whether to visualize the comprehensiveness of attributions over all examples.",
+        help="Whether to visualize the comprehensiveness and log-odds for different k values of attributions over all examples.",
     )
-    parser.set_defaults(viz_comp=True)
+    parser.set_defaults(viz_topk=True)
 
     args = parser.parse_args()
     if "-" in args.examples:
@@ -112,7 +112,7 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         args.steps,
         args.seed,
         args.viz_attr,
-        args.viz_comp,
+        args.viz_topk,
     )
 
 

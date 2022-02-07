@@ -1,5 +1,6 @@
 from functools import partial
-from typing import List, Dict
+from torch.nn.functional import softmax
+from typing import List, Dict, Union
 from collections import defaultdict
 
 import torch
@@ -18,13 +19,20 @@ from src.helper_functions import (
 )
 from src.parse_arguments import MODEL_STRS, parse_arguments
 from src.visualization import embedding_histogram, visualize_attrs, visualize_ablation_scores
-from src.dig import DiscretetizedIntegratedGradients
+from src.dig import DiscretizedIntegratedGradients
 from src.monotonic_paths import scale_inputs
 from src.custom_ig import CustomIntegratedGradients
-from src.ablation_evaluation import calculate_suff, calculate_comp, get_avg_scores
+from src.ablation_evaluation import (
+    calculate_suff,
+    calculate_comp,
+    get_avg_scores,
+    calculate_log_odds,
+)
 
 # K's for TopK ablation tests
-K = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
+K = [0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
+
+DEV = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def main(
@@ -35,17 +43,15 @@ def main(
     steps: int,
     seed: int,
     viz_attr: bool,
-    viz_comp: bool,
+    viz_topk: bool,
 ) -> None:
     """
     :param examples: list of indices for samples from the sst2 validation set to be classified and explained.
     :param baselines: list of
     :param models: keys for MODEL_STRS. What models should be used for classification and to be explained.
     """
-    dataset = load_dataset("glue", "sst2", split="validation")
-    dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(dev)
-
+    dataset = load_dataset("glue", "sst2", split="test")
+    print(DEV)
 
     for model_str in models:
         print(f"MODEL: {model_str}")
@@ -53,7 +59,16 @@ def main(
         tokenizer = AutoTokenizer.from_pretrained(MODEL_STRS[model_str])
         model = AutoModelForSequenceClassification.from_pretrained(
             MODEL_STRS[model_str], return_dict=False
-        ).to(dev)
+        ).to(DEV)
+        cls_emb = construct_word_embedding(
+            model, model_str, torch.tensor([[tokenizer.cls_token_id]]).to(DEV)
+        )
+        sep_emb = construct_word_embedding(
+            model, model_str, torch.tensor([[tokenizer.sep_token_id]]).to(DEV)
+        )
+        pad_emb = construct_word_embedding(
+            model, model_str, torch.tensor([[tokenizer.pad_token_id]]).to(DEV)
+        )
 
         # plot histogram
         # all_word_embeddings = get_word_embeddings(model, model_str)
@@ -61,15 +76,11 @@ def main(
         # continue
 
         # choose IG version
+        ig: Union[CustomIntegratedGradients, DiscretizedIntegratedGradients]
         if version_ig == "ig":
-            ig: CustomIntegratedGradients = CustomIntegratedGradients(
-                partial(nn_forward_fn, model, model_str)
-            )
+            ig = CustomIntegratedGradients(partial(nn_forward_fn, model, model_str))
         elif version_ig == "dig":
-            # TODO: add DIG
-            ig: DiscretetizedIntegratedGradients = DiscretetizedIntegratedGradients(
-                partial(nn_forward_fn, model, model_str)
-            )
+            ig = DiscretizedIntegratedGradients(partial(nn_forward_fn, model, model_str))
             # get knn auxiliary data
             auxiliary_data = load_mappings(model_str)
 
@@ -77,31 +88,41 @@ def main(
         comps: Dict[str, Dict[float, List[float]]] = {
             baseline_str: defaultdict(list) for baseline_str in baselines
         }
+        # Log Odds:
+        log_odds: Dict[str, Dict[float, List[float]]] = {
+            baseline_str: defaultdict(list) for baseline_str in baselines
+        }
 
         print(f"USED EXAMPLES:")
-        print(
-            [
+        [
+            print(
                 f"[{stringify_label(dataset[example]['label'])}]: {dataset[example]['sentence']}"
                 for example in examples
-            ]
-        )
+            )
+        ]
 
+        l = len(examples)
         for example in examples:
+            print(f"EXAMPLE: {example + 1}/{l}")
             x = dataset[example]
-            input = tokenizer(x["sentence"], padding=True, return_tensors="pt")
-            input_ids = input["input_ids"][0]
+            input = tokenizer(x["sentence"], padding=True, return_tensors="pt").to(DEV)
+            input_ids = input["input_ids"][0].cpu()
             words = tokenizer.convert_ids_to_tokens(list(map(int, input_ids)))
             # formatted_input = (input["input_ids"], input["attention_mask"])
-            input_emb = construct_word_embedding(model, model_str, input["input_ids"]).to(dev)
+            input_emb = construct_word_embedding(model, model_str, input["input_ids"]).to(DEV)
             true_label = stringify_label(x["label"])
             prediction = predict(model, input_emb, input["attention_mask"])
-            prediction_str = stringify_label(torch.argmax(prediction).item())
+            prediction_probs = softmax(prediction, dim=1)
+            prediction_str = (
+                stringify_label(torch.argmax(prediction_probs).item())
+                + f" ({(torch.max(prediction_probs).item() * 100):.2f})"
+            )
 
             bl_attrs = {}
             for baseline_str in baselines:
                 print(f"BASELINE: {baseline_str}")
-                bb = BaselineBuilder(model, model_str, tokenizer, seed)
-                baseline = bb.build_baseline(input_emb, b_type=baseline_str).to(dev)
+                bb = BaselineBuilder(model_str, seed, cls_emb, sep_emb, pad_emb, DEV)
+                baseline = bb.build_baseline(input_emb, b_type=baseline_str).to(DEV)
 
                 if version_ig == "ig":
                     # attributions for a batch of sentences
@@ -111,14 +132,20 @@ def main(
                 elif version_ig == "dig":
                     # attributions for one single sentence
                     attrs = []
-                    baseline_ids = [
-                        get_token_id_from_embedding(model, model_str, base_emb)
-                        for base_emb in baseline[0]
-                    ]
+                    # baseline_ids_true = [
+                    #     get_token_id_from_embedding(model, model_str, base_emb)
+                    #     for base_emb in baseline[0]
+                    # ]
+                    # TODO hack for pad token baseline
+                    baseline_ids = (
+                        [tokenizer.cls_token_id]
+                        + [tokenizer.pad_token_id] * (baseline.shape[1] - 2)
+                        + [tokenizer.sep_token_id]
+                    )
                     scaled_features, word_paths = scale_inputs(
                         input_ids,
                         baseline_ids,
-                        dev,
+                        DEV,
                         auxiliary_data,
                         steps=steps - 2,
                         strategy="greedy",
@@ -129,18 +156,29 @@ def main(
                     raise Exception("?????")
 
                 summed_attrs = torch.sum(torch.abs(attrs), dim=2).squeeze(0)
-                bl_attrs[baseline_str] = summed_attrs.detach().numpy()
+                bl_attrs[baseline_str] = summed_attrs.detach().cpu().numpy()
 
-            if viz_comp:
+            if viz_topk:
                 for baseline_str, attr in bl_attrs.items():
                     for k in K:
                         comps[baseline_str][k].append(
                             calculate_comp(
-                                torch.tensor(attr),
+                                torch.tensor(attr, device=DEV),
                                 k,
                                 bb.pad_emb,
                                 model,
-                                input_emb.detach().cpu(),
+                                input_emb,
+                                input["attention_mask"],
+                                prediction,
+                            )
+                        )
+                        log_odds[baseline_str][k].append(
+                            calculate_log_odds(
+                                torch.tensor(attr, device=DEV),
+                                k,
+                                bb.pad_emb,
+                                model,
+                                input_emb,
                                 input["attention_mask"],
                                 prediction,
                             )
@@ -155,9 +193,15 @@ def main(
                     x["sentence"],
                     words,
                 )
-        if viz_comp:
+        if viz_topk:
             avg_comps: Dict[str, Dict[float, float]] = get_avg_scores(comps)
-            visualize_ablation_scores(avg_comps, model_str, 'comprehensiveness', len(examples), save_str=None)
+            visualize_ablation_scores(
+                avg_comps, model_str, "comprehensiveness", len(examples), save_str=None
+            )
+            avg_log_odds: Dict[str, Dict[float, float]] = get_avg_scores(log_odds)
+            visualize_ablation_scores(
+                avg_log_odds, model_str, "log odds", len(examples), save_str=None
+            )
 
 
 if __name__ == "__main__":

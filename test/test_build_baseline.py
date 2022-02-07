@@ -7,6 +7,8 @@ from src.helper_functions import construct_word_embedding
 
 import torch
 
+DEV = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 @parameterized_class([{"model_str": "distilbert"}, {"model_str": "bert"}])
 class TestBaselineBuilder(unittest.TestCase):
@@ -15,7 +17,16 @@ class TestBaselineBuilder(unittest.TestCase):
         self.model = AutoModelForSequenceClassification.from_pretrained(
             MODEL_STRS[self.model_str], return_dict=False
         )
-        self.bb = BaselineBuilder(self.model, self.model_str, self.tokenizer, seed=33)
+        cls_emb = construct_word_embedding(
+            self.model, self.model_str, torch.tensor([[self.tokenizer.cls_token_id]]).to(DEV)
+        )
+        sep_emb = construct_word_embedding(
+            self.model, self.model_str, torch.tensor([[self.tokenizer.sep_token_id]]).to(DEV)
+        )
+        pad_emb = construct_word_embedding(
+            self.model, self.model_str, torch.tensor([[self.tokenizer.pad_token_id]]).to(DEV)
+        )
+        self.bb = BaselineBuilder(self.model_str, 33, cls_emb, sep_emb, pad_emb, DEV)
 
     def test_build_baseline(self):
         """
@@ -96,7 +107,7 @@ class TestBaselineBuilder(unittest.TestCase):
 
     def test_uniform(self):
         """
-        Embeddings should be different to another. 
+        Embeddings should be different to another.
         """
         # TODO
         return

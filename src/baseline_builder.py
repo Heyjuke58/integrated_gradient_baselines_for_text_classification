@@ -3,7 +3,6 @@ from torchvision.transforms.functional import gaussian_blur
 
 import torch
 from torch import Tensor
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from src.helper_functions import construct_word_embedding
 from src.parse_arguments import BASELINE_STRS
@@ -19,32 +18,33 @@ EMB_STATS = {
 class BaselineBuilder:
     def __init__(
         self,
-        model: AutoModelForSequenceClassification,
         model_str: str,
-        tokenizer: AutoTokenizer,
         seed: int,
+        cls_emb: Tensor,
+        sep_emb: Tensor,
+        pad_emb: Tensor,
+        device,
     ) -> None:
         """
         Create a specific type of baseline for IG for a sentence.
         Note that the baseline will always keep the [CLS] and [SEP] tokens, and these will also always stay constant
         in the "paths" for IG.
 
-        :param b_type: Key for ... . Type of baseline that should be generated.
+        :param model_str: One of ['distilbert', 'bert']
+        :param seed: Seed for the random baseline generation
+        :param cls_emb: Embedding for the cls token
+        :param sep_emb: Embedding for the sep token
+        :param pad_emb: Embedding for the pad token
         """
-        self.cls_emb = construct_word_embedding(
-            model, model_str, torch.tensor([[tokenizer.cls_token_id]])
-        )
-        self.sep_emb = construct_word_embedding(
-            model, model_str, torch.tensor([[tokenizer.sep_token_id]])
-        )
-        self.pad_emb = construct_word_embedding(
-            model, model_str, torch.tensor([[tokenizer.pad_token_id]])
-        )
+        self.cls_emb = cls_emb
+        self.sep_emb = sep_emb
+        self.pad_emb = pad_emb
         self.emb_mean = EMB_STATS[model_str]["mean"]
         self.emb_std = EMB_STATS[model_str]["std"]
         self.emb_max = self.emb_mean + 2.58 * self.emb_std
         self.emb_min = self.emb_mean - 2.58 * self.emb_std
-        self.rngesus = torch.Generator().manual_seed(seed)
+        self.rngesus = torch.Generator(device=device).manual_seed(seed)
+        self.device = device
 
     def build_baseline(self, input_emb: Tensor, b_type: str) -> Tensor:
         """
@@ -58,7 +58,7 @@ class BaselineBuilder:
             Tensor: The baseline tensor
         """
         # build mask for the actual sentence tokens to be replaced by a baseline
-        input_mask = torch.zeros(input_emb.shape[0:2], dtype=bool)
+        input_mask = torch.zeros(input_emb.shape[0:2], dtype=bool).to(self.device)
         baseline_emb = input_emb.detach().clone()
         for i, sentence in enumerate(baseline_emb):
             assert torch.equal(
@@ -120,7 +120,7 @@ class BaselineBuilder:
         small_vals_mask = input_emb < self.emb_mean
         big_vals_mask = ~small_vals_mask
 
-        baseline_emb = torch.zeros_like(input_emb)
+        baseline_emb = torch.zeros_like(input_emb, device=self.device)
         baseline_emb[small_vals_mask] = self.emb_max
         baseline_emb[big_vals_mask] = self.emb_min
         return baseline_emb
@@ -147,14 +147,14 @@ class BaselineBuilder:
         """
         Ignores the input and returns a baseline consisting of just the embeddings of the PAD token (as done in the DIG paper).
         """
-        baseline_emb = torch.zeros_like(input_emb)
+        baseline_emb = torch.zeros_like(input_emb, device=self.device)
         for i, _ in enumerate(baseline_emb):
             baseline_emb[i] = self.pad_emb
 
         return baseline_emb
 
     def _uniform(self, input_emb: Tensor) -> Tensor:
-        return torch.FloatTensor(input_emb.shape).uniform_(
+        return torch.cuda.FloatTensor(input_emb.shape).uniform_(
             self.emb_min, self.emb_max, generator=self.rngesus
         )
 
