@@ -10,6 +10,7 @@ MODEL_STRS = {
 }
 BASELINE_STRS = {
     "pad_embed",
+    "zero_embed",
     "furthest_embed",
     "blurred_embed",
     "flipped_blurred_embed",
@@ -22,7 +23,7 @@ BASELINE_STRS = {
 }
 
 
-def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
+def parse_arguments() -> Tuple[Any, ...]:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-e",
@@ -37,7 +38,7 @@ def parse_arguments() -> Tuple[List[int], List[str], List[str]]:
         "--baselines",
         type=str,
         dest="baselines",
-        default="furthest_embed,pad_embed,blurred_embed,flipped_blurred_embed,both_blurred_embed,uniform,gaussian",
+        default="furthest_embed,pad_embed,zero_embed,blurred_embed,flipped_blurred_embed,both_blurred_embed,uniform,gaussian",
         # default="blurred_embed,flipped_blurred_embed,both_blurred_embed",
         help="Type of baseline to be used for Integrated Gradients.",
     )

@@ -2,7 +2,6 @@ import unittest
 import torch
 from parameterized import parameterized_class
 from src.helper_functions import construct_word_embedding
-from src.baseline_builder import BaselineBuilder
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from src.parse_arguments import MODEL_STRS
 from src.ablation_evaluation import replace_k_percent
@@ -46,7 +45,7 @@ class TestAblationEvaluation(unittest.TestCase):
         expected_emb[0, -2] = self.replacement_emb
         self.assertTrue(torch.equal(masked_emb, expected_emb))
         self.assertTrue(torch.equal(masked_emb2, expected_emb))
-        
+
         # 50% of tokens replaced
         masked_emb = replace_k_percent(attr, 0.5, self.replacement_emb, self.input_emb)
         expected_emb = torch.clone(self.input_emb)

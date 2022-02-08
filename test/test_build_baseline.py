@@ -1,9 +1,11 @@
+from math import pi, sqrt
 import unittest
 from parameterized import parameterized_class
 from src.baseline_builder import BaselineBuilder
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from src.parse_arguments import MODEL_STRS, BASELINE_STRS
 from src.helper_functions import construct_word_embedding
+from src.token_embedding_helper import TokenEmbeddingHelper
 
 import torch
 
@@ -16,17 +18,26 @@ class TestBaselineBuilder(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_STRS[self.model_str])
         self.model = AutoModelForSequenceClassification.from_pretrained(
             MODEL_STRS[self.model_str], return_dict=False
+        ).to(DEV)
+        self.cls_emb = construct_word_embedding(
+            self.model, self.model_str, torch.tensor([[self.tokenizer.cls_token_id]], device=DEV)
         )
-        cls_emb = construct_word_embedding(
-            self.model, self.model_str, torch.tensor([[self.tokenizer.cls_token_id]]).to(DEV)
+        self.sep_emb = construct_word_embedding(
+            self.model, self.model_str, torch.tensor([[self.tokenizer.sep_token_id]], device=DEV)
         )
-        sep_emb = construct_word_embedding(
-            self.model, self.model_str, torch.tensor([[self.tokenizer.sep_token_id]]).to(DEV)
+        self.pad_emb = construct_word_embedding(
+            self.model, self.model_str, torch.tensor([[self.tokenizer.pad_token_id]], device=DEV)
         )
-        pad_emb = construct_word_embedding(
-            self.model, self.model_str, torch.tensor([[self.tokenizer.pad_token_id]]).to(DEV)
+        self.teh = TokenEmbeddingHelper(self.model, self.model_str)
+        self.bb = BaselineBuilder(
+            self.model_str,
+            33,
+            self.teh,
+            self.cls_emb,
+            self.sep_emb,
+            self.pad_emb,
+            DEV,
         )
-        self.bb = BaselineBuilder(self.model_str, 33, cls_emb, sep_emb, pad_emb, DEV)
 
     def test_build_baseline(self):
         """
@@ -43,25 +54,26 @@ class TestBaselineBuilder(unittest.TestCase):
         # c...spp
         # c.....s
 
-        inputs_tok = self.tokenizer(sentences, padding=True, return_tensors="pt")
-        inputs_emb = construct_word_embedding(self.model, self.model_str, inputs_tok["input_ids"])
+        inputs_tok = self.tokenizer(sentences, padding=True, return_tensors="pt").to(DEV)
+        inputs_emb = construct_word_embedding(
+            self.model, self.model_str, inputs_tok["input_ids"]
+        ).to(DEV)
 
-        b_types = ["furthest_embed", "pad_embed", "blurred_embed"]
-        # b_types = BASELINE_STRS
+        b_types = BASELINE_STRS
         for b_type in b_types:
             baselines_emb = self.bb.build_baseline(inputs_emb, b_type=b_type)
             self.assertEqual(inputs_emb.shape, baselines_emb.shape)
 
             self.assertTrue(
-                torch.all(baselines_emb[:, 0] == self.bb.cls_emb.repeat(len(sentences), 1, 1))
+                torch.all(baselines_emb[:, 0] == self.cls_emb.repeat(len(sentences), 1, 1))
             )
-            self.assertTrue(torch.all(baselines_emb[0, 5:] == self.bb.pad_emb.repeat(2, 1, 1)))
-            self.assertTrue(torch.all(baselines_emb[0, 4] == self.bb.sep_emb))
-            self.assertTrue(torch.all(baselines_emb[1, -1] == self.bb.sep_emb))
+            self.assertTrue(torch.all(baselines_emb[0, 5:] == self.pad_emb.repeat(2, 1, 1)))
+            self.assertTrue(torch.all(baselines_emb[0, 4] == self.sep_emb))
+            self.assertTrue(torch.all(baselines_emb[1, -1] == self.sep_emb))
 
             # check that baseline is otherwise different to original
             equal_mask = torch.tensor(
-                [[1, 0, 0, 0, 1, 1, 1], [1, 0, 0, 0, 0, 0, 1]], dtype=torch.bool
+                [[1, 0, 0, 0, 1, 1, 1], [1, 0, 0, 0, 0, 0, 1]], dtype=torch.bool, device=DEV
             )
             self.assertTrue(torch.all(torch.all(baselines_emb == inputs_emb, dim=2) == equal_mask))
 
@@ -80,7 +92,7 @@ class TestBaselineBuilder(unittest.TestCase):
         """
         In a 3-dimensional embedding, the values in the different dimensions should be independent of eachother.
         """
-        input_emb = torch.zeros((6, 3), dtype=float)
+        input_emb = torch.zeros((6, 3), dtype=torch.float, device=DEV)
         input_emb[:, 0] = -1000.0
         input_emb[:, 2] = 1000.0
         baseline_emb = self.bb._blurred_embed(input_emb)
@@ -92,28 +104,49 @@ class TestBaselineBuilder(unittest.TestCase):
     def test_deterministic(self):
         """
         With the same seed, randomized baselines for the same sentence should be the same.
+        With different seed, randomized baselines should be unequal.
         """
-        bb1 = BaselineBuilder(self.model, self.model_str, self.tokenizer, seed=33)
-        bb2 = BaselineBuilder(self.model, self.model_str, self.tokenizer, seed=33)
+        bb1 = BaselineBuilder(
+            self.model_str, 33, self.teh, self.cls_emb, self.sep_emb, self.pad_emb, DEV
+        )
+        bb2 = BaselineBuilder(
+            self.model_str, 33, self.teh, self.cls_emb, self.sep_emb, self.pad_emb, DEV
+        )
+        bb3 = BaselineBuilder(
+            self.model_str, 42, self.teh, self.cls_emb, self.sep_emb, self.pad_emb, DEV
+        )
         sentence = "hello world!"
-        input_tok = self.tokenizer(sentence, padding=True, return_tensors="pt")
-        input_emb = construct_word_embedding(self.model, self.model_str, input_tok["input_ids"])
+        input_tok = self.tokenizer(sentence, padding=True, return_tensors="pt").to(DEV)
+        input_emb = construct_word_embedding(self.model, self.model_str, input_tok["input_ids"]).to(
+            DEV
+        )
 
         bl_types = ["uniform", "gaussian"]
         for bl_type in bl_types:
             bl1_emb = bb1.build_baseline(input_emb, b_type=bl_type)
             bl2_emb = bb2.build_baseline(input_emb, b_type=bl_type)
+            bl3_emb = bb3.build_baseline(input_emb, b_type=bl_type)
             self.assertTrue(torch.equal(bl1_emb, bl2_emb))
+            self.assertFalse(torch.equal(bl1_emb, bl3_emb))
 
     def test_uniform(self):
         """
         Embeddings should be different to another.
         """
-        # TODO
-        return
-        input_emb = torch.zeros((6, 768), 0.1)
+        input_emb = torch.zeros((6, 768), device=DEV)
         bl_emb = self.bb._uniform(input_emb)
+        for i in range(bl_emb.shape[0]):
+            for j in range(i + 1, bl_emb.shape[0]):
+                self.assertFalse(torch.equal(bl_emb[i], bl_emb[j]))
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_gaussian(self):
+        """
+        Gaussian Baseline should not be too different from input.
+        """
+        input_emb = torch.zeros((1, 768), device=DEV)
+        distant_emb = torch.full((1, 768), sqrt(2 / pi), device=DEV)
+        bl_emb = self.bb._gaussian(input_emb)
+        for i in range(bl_emb.shape[0]):
+            for j in range(i + 1, bl_emb.shape[0]):
+                # self.assertTrue(torch.cdist(bl_emb[i], bl_emb[j]))
+                pass

@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 from matplotlib import cm
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 import torch
 from torch import Tensor
@@ -13,7 +14,6 @@ import pandas as pd
 def visualize_attrs(
     bl_attrs: Dict[str, ndarray],
     prediction: str,
-    true_label: str,
     model_str: str,
     version_ig: str,
     sentence: str,
@@ -23,37 +23,53 @@ def visualize_attrs(
     """makes bar charts that show how important each token-word is"""
     num_bbs = len(bl_attrs)
     fig, axs = plt.subplots(
-        num_bbs, 1, sharex=True, squeeze=False, figsize=(16, 8), gridspec_kw={"hspace": 0}
+        num_bbs, 1, sharex=True, squeeze=False, figsize=(16, 9), gridspec_kw={"hspace": 0}
+    )
+    axins1 = inset_axes(
+        axs[0, 0],
+        width="100%",
+        height="100%",
+        # loc="upper right",
+        bbox_to_anchor=(0.78, 1.4, 0.2, 0.1),
+        bbox_transform=axs[0, 0].transAxes,
     )
     x_indices = range(len(token_words))
-    # pal = sns.color_palette("BuGn", len(token_words))
     pal = sns.color_palette("summer", len(token_words))
 
     # loop over different input sentences:
-    # for j in range(bl_attrs.values()[0].shape[0]):
     for i, (bl_name, attrs) in enumerate(bl_attrs.items()):
         df = pd.DataFrame(attrs, columns=["attr"])
-        rank = df.rank(axis=0, method='min', ascending=False)["attr"].to_numpy(dtype=np.int8)
+        rank = df.rank(axis=0, method="min", ascending=False)["attr"].to_numpy(dtype=np.int8)
         sns.barplot(
             x=df.index,
             y="attr",
             data=df,
-            palette=np.array(pal[::1])[rank],
+            palette=np.array(pal)[rank],
             # hue="attr",
             ax=axs[i, 0],
             orient="v",
         )
         axs[i, 0].set_xticks(x_indices)
         # ax.set_yticks(token_words)
-        axs[i, 0].set_xticklabels(token_words)
+        axs[i, 0].set_xticklabels(token_words, rotation=30, ha="right")
         axs[i, 0].set_ylabel(bl_name, rotation=0, ha="right")
-        # axs[i, 0].legend([], [], frameon=False)
 
-    # axs[0, 0].set_title(f"{version_ig} for {model_str}")
-    fig.text(
-        0.5, 0.95, f"{version_ig} attributions for {model_str} model", ha="center", fontsize=16
+    # axs[0, 0].legend()
+    cbar = fig.colorbar(
+        cm.ScalarMappable(norm=None, cmap="summer"),
+        cax=axins1,
+        orientation="horizontal",
+        ticks=[0, 1],
     )
-    plt.suptitle(f"sentence: {sentence}\nTrue: {true_label}, Prediction: {prediction}", y=0.05)
+    cbar.ax.set_xticklabels(["high rank", "low rank"])
+    fig.text(
+        0.5,
+        0.95,
+        f"{version_ig.upper()} attributions for {model_str.upper()} model\n(Sum of absolute cumulative gradients)",
+        ha="center",
+        fontsize=16,
+    )
+    plt.suptitle(f"sentence: {sentence}\nPrediction: {prediction}", y=0.05)
     # plt.tight_layout()
     if save_str is not None:
         if not save_str.endswith(".png"):

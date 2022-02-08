@@ -13,7 +13,6 @@ from src.helper_functions import (
     get_word_embeddings,
     nn_forward_fn,
     load_mappings,
-    get_token_id_from_embedding,
     predict,
     stringify_label,
 )
@@ -28,6 +27,7 @@ from src.ablation_evaluation import (
     get_avg_scores,
     calculate_log_odds,
 )
+from src.token_embedding_helper import TokenEmbeddingHelper
 
 # K's for TopK ablation tests
 K = [0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
@@ -70,6 +70,8 @@ def main(
             model, model_str, torch.tensor([[tokenizer.pad_token_id]]).to(DEV)
         )
 
+        token_emb_helper = TokenEmbeddingHelper(model, model_str)
+
         # plot histogram
         # all_word_embeddings = get_word_embeddings(model, model_str)
         # embedding_histogram(all_word_embeddings)
@@ -110,18 +112,19 @@ def main(
             words = tokenizer.convert_ids_to_tokens(list(map(int, input_ids)))
             # formatted_input = (input["input_ids"], input["attention_mask"])
             input_emb = construct_word_embedding(model, model_str, input["input_ids"]).to(DEV)
-            true_label = stringify_label(x["label"])
             prediction = predict(model, input_emb, input["attention_mask"])
             prediction_probs = softmax(prediction, dim=1)
             prediction_str = (
                 stringify_label(torch.argmax(prediction_probs).item())
-                + f" ({(torch.max(prediction_probs).item() * 100):.2f})"
+                + f" ({(torch.max(prediction_probs).item() * 100):.2f}%)"
             )
 
             bl_attrs = {}
             for baseline_str in baselines:
                 print(f"BASELINE: {baseline_str}")
-                bb = BaselineBuilder(model_str, seed, cls_emb, sep_emb, pad_emb, DEV)
+                bb = BaselineBuilder(
+                    model_str, seed, token_emb_helper, cls_emb, sep_emb, pad_emb, DEV
+                )
                 baseline = bb.build_baseline(input_emb, b_type=baseline_str).to(DEV)
 
                 if version_ig == "ig":
@@ -129,19 +132,19 @@ def main(
                     (attrs,), (word_paths,) = ig._attribute(
                         inputs=input_emb, baselines=baseline, n_steps=steps
                     )
+                    word_paths_discretized = ()
                 elif version_ig == "dig":
                     # attributions for one single sentence
                     attrs = []
-                    # baseline_ids_true = [
-                    #     get_token_id_from_embedding(model, model_str, base_emb)
-                    #     for base_emb in baseline[0]
-                    # ]
+                    baseline_ids = [
+                        token_emb_helper.get_token_id(base_emb) for base_emb in baseline[0]
+                    ]
                     # TODO hack for pad token baseline
-                    baseline_ids = (
-                        [tokenizer.cls_token_id]
-                        + [tokenizer.pad_token_id] * (baseline.shape[1] - 2)
-                        + [tokenizer.sep_token_id]
-                    )
+                    # baseline_ids = (
+                    #     [tokenizer.cls_token_id]
+                    #     + [tokenizer.pad_token_id] * (baseline.shape[1] - 2)
+                    #     + [tokenizer.sep_token_id]
+                    # )
                     scaled_features, word_paths = scale_inputs(
                         input_ids,
                         baseline_ids,
@@ -153,7 +156,9 @@ def main(
                     # TODO: maybe add additional forward args to attribute
                     attrs = ig.attribute(scaled_features=scaled_features, n_steps=steps)
                 else:
-                    raise Exception("?????")
+                    raise Exception(
+                        f"IG version should be one of ['ig', 'dig']. Instead it is {version_ig}"
+                    )
 
                 summed_attrs = torch.sum(torch.abs(attrs), dim=2).squeeze(0)
                 bl_attrs[baseline_str] = summed_attrs.detach().cpu().numpy()
@@ -187,7 +192,6 @@ def main(
                 visualize_attrs(
                     bl_attrs,
                     prediction_str,
-                    true_label,
                     model_str,
                     version_ig,
                     x["sentence"],

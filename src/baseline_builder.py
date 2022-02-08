@@ -1,11 +1,11 @@
-from typing import Optional, List
+from typing import List
 from torchvision.transforms.functional import gaussian_blur
 
 import torch
 from torch import Tensor
 
-from src.helper_functions import construct_word_embedding
 from src.parse_arguments import BASELINE_STRS
+from src.token_embedding_helper import TokenEmbeddingHelper
 
 # mean and std of all word embeddings for our two used models
 # we need these for certain baseline computations
@@ -20,6 +20,7 @@ class BaselineBuilder:
         self,
         model_str: str,
         seed: int,
+        token_emb_helper: TokenEmbeddingHelper,
         cls_emb: Tensor,
         sep_emb: Tensor,
         pad_emb: Tensor,
@@ -36,6 +37,7 @@ class BaselineBuilder:
         :param sep_emb: Embedding for the sep token
         :param pad_emb: Embedding for the pad token
         """
+        self.token_emb_helper = token_emb_helper
         self.cls_emb = cls_emb
         self.sep_emb = sep_emb
         self.pad_emb = pad_emb
@@ -58,7 +60,7 @@ class BaselineBuilder:
             Tensor: The baseline tensor
         """
         # build mask for the actual sentence tokens to be replaced by a baseline
-        input_mask = torch.zeros(input_emb.shape[0:2], dtype=bool).to(self.device)
+        input_mask = torch.zeros(input_emb.shape[0:2], dtype=bool, device=self.device)
         baseline_emb = input_emb.detach().clone()
         for i, sentence in enumerate(baseline_emb):
             assert torch.equal(
@@ -80,7 +82,7 @@ class BaselineBuilder:
             b_type in BASELINE_STRS
         ), f"{b_type} not a legal baseline method! Must be one of {BASELINE_STRS}."
 
-        base_sentence_embs: Tensor = torch.Tensor([])
+        base_sentence_embs: List[Tensor] = []
         if b_type == "furthest_embed":
             base_sentence_embs = [self._furthest_embed(s) for s in input_sentences]
         elif b_type == "blurred_embed":
@@ -91,6 +93,8 @@ class BaselineBuilder:
             base_sentence_embs = [self._both_blurred_embed(s) for s in input_sentences]
         elif b_type == "pad_embed":
             base_sentence_embs = [self._pad_embed(s) for s in input_sentences]
+        elif b_type == "zero_embed":
+            base_sentence_embs = [self._zero_embed(s) for s in input_sentences]
         elif b_type == "uniform":
             base_sentence_embs = [self._uniform(s) for s in input_sentences]
         elif b_type == "gaussian":
@@ -153,13 +157,21 @@ class BaselineBuilder:
 
         return baseline_emb
 
+    def _zero_embed(self, input_emb: Tensor) -> Tensor:
+        """
+        It's all zeros (unlike the PAD embedding!)
+        """
+        return torch.zeros_like(input_emb, dtype=torch.float, device=self.device)
+
     def _uniform(self, input_emb: Tensor) -> Tensor:
-        return torch.cuda.FloatTensor(input_emb.shape).uniform_(
-            self.emb_min, self.emb_max, generator=self.rngesus
-        )
+        if self.device == torch.device("cpu"):
+            return torch.FloatTensor().uniform_(self.emb_min, self.emb_max, generator=self.rngesus)
+        else:
+            return torch.cuda.FloatTensor(input_emb.shape).uniform_(
+                self.emb_min, self.emb_max, generator=self.rngesus
+            )
 
     def _gaussian(self, input_emb: Tensor) -> Tensor:
-        # return torch.FloatTensor(input_emb.shape).uniform_(self.emb_min, self.emb_max)
         return torch.clamp(
             torch.normal(mean=input_emb, std=1, generator=self.rngesus),
             min=self.emb_min,
@@ -167,10 +179,31 @@ class BaselineBuilder:
         )
 
     def _furthest_word(self, input_emb: Tensor) -> Tensor:
-        raise NotImplementedError
-
-    def _avg_word_embed(self, input_emb: Tensor) -> Tensor:
-        raise NotImplementedError
+        """
+        Like furthest word embedding but selects the closest real word to the generated furthest embedding.
+        """
+        furthest_emb = self._furthest_embed(input_emb)
+        for i, furthest_emb_token in enumerate(furthest_emb):
+            furthest_emb[i] = self.token_emb_helper.get_closest_by_token_embed_for_embed(
+                furthest_emb_token
+            )
+        return furthest_emb
 
     def _avg_word(self, input_emb: Tensor) -> Tensor:
-        raise NotImplementedError
+        """
+        Like avg_word_embed, but convert to embedding of closest word.
+        """
+        avg_word_embed = self._avg_word_embed(
+            torch.zeros(1, input_emb.shape[1], device=self.device)
+        )
+        avg_word = self.token_emb_helper.get_closest_by_token_embed_for_embed(avg_word_embed[0])
+        return avg_word.expand(input_emb.shape)
+
+    def _avg_word_embed(self, input_emb: Tensor) -> Tensor:
+        """
+        Go over embeddings of whole vocabulary to calculate the "average" word embedding.
+        Each word is weighted equally.
+        """
+        all_words = torch.stack(list(self.token_emb_helper.token_to_emb.values()))
+        avg_word_embed = torch.mean(all_words, dim=0).expand(input_emb.shape)
+        return avg_word_embed
