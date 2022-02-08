@@ -10,8 +10,18 @@ from src.token_embedding_helper import TokenEmbeddingHelper
 # mean and std of all word embeddings for our two used models
 # we need these for certain baseline computations
 EMB_STATS = {
-    "distilbert": {"mean": -0.03833248, "std": 0.046996452},
-    "bert": {"mean": -0.028025009, "std": 0.042667598},
+    "distilbert": {
+        # "mean": -0.03833248,
+        # "std": 0.046996452,
+        "soft_min": -0.19720751,
+        "soft_max": 0.19051318,
+    },
+    "bert": {
+        # "mean": -0.028025009,
+        # "std": 0.042667598,
+        "soft_min": -0.17209561,
+        "soft_max": 0.14460362,
+    },
 }
 
 
@@ -41,10 +51,11 @@ class BaselineBuilder:
         self.cls_emb = cls_emb
         self.sep_emb = sep_emb
         self.pad_emb = pad_emb
-        self.emb_mean = EMB_STATS[model_str]["mean"]
-        self.emb_std = EMB_STATS[model_str]["std"]
-        self.emb_max = self.emb_mean + 2.58 * self.emb_std
-        self.emb_min = self.emb_mean - 2.58 * self.emb_std
+        self.emb_soft_min = EMB_STATS[model_str]["soft_min"]
+        self.emb_soft_max = EMB_STATS[model_str]["soft_max"]
+        self.emb_middle = (self.emb_soft_max + self.emb_soft_min) / 2
+        # self.emb_mean = EMB_STATS[model_str]["mean"]
+        # self.emb_std = EMB_STATS[model_str]["std"]
         self.rngesus = torch.Generator(device=device).manual_seed(seed)
         self.device = device
 
@@ -60,7 +71,7 @@ class BaselineBuilder:
             Tensor: The baseline tensor
         """
         # build mask for the actual sentence tokens to be replaced by a baseline
-        input_mask = torch.zeros(input_emb.shape[0:2], dtype=bool, device=self.device)
+        input_mask = torch.zeros(input_emb.shape[0:2], dtype=torch.bool, device=self.device)
         baseline_emb = input_emb.detach().clone()
         for i, sentence in enumerate(baseline_emb):
             assert torch.equal(
@@ -121,12 +132,12 @@ class BaselineBuilder:
         :param input_embed: embeddings of words (not the surrounding cls, sep, or pad embeddings!)
         """
         # min and max vals are the bounds of the sigma-surrounding which includes ~99% of all values
-        small_vals_mask = input_emb < self.emb_mean
+        small_vals_mask = input_emb < self.emb_middle
         big_vals_mask = ~small_vals_mask
 
         baseline_emb = torch.zeros_like(input_emb, device=self.device)
-        baseline_emb[small_vals_mask] = self.emb_max
-        baseline_emb[big_vals_mask] = self.emb_min
+        baseline_emb[small_vals_mask] = self.emb_soft_max
+        baseline_emb[big_vals_mask] = self.emb_soft_min
         return baseline_emb
 
     def _blurred_embed(self, input_emb: Tensor) -> Tensor:
@@ -165,18 +176,21 @@ class BaselineBuilder:
 
     def _uniform(self, input_emb: Tensor) -> Tensor:
         if self.device == torch.device("cpu"):
-            return torch.FloatTensor().uniform_(self.emb_min, self.emb_max, generator=self.rngesus)
+            return torch.FloatTensor(input_emb.shape).uniform_(
+                self.emb_soft_min, self.emb_soft_max, generator=self.rngesus
+            )
         else:
             return torch.cuda.FloatTensor(input_emb.shape).uniform_(
-                self.emb_min, self.emb_max, generator=self.rngesus
+                self.emb_soft_min, self.emb_soft_max, generator=self.rngesus
             )
 
     def _gaussian(self, input_emb: Tensor) -> Tensor:
-        return torch.clamp(
-            torch.normal(mean=input_emb, std=1, generator=self.rngesus),
-            min=self.emb_min,
-            max=self.emb_max,
+        a = torch.clamp(
+            torch.normal(mean=input_emb, std=0.1, generator=self.rngesus),
+            min=self.emb_soft_min,
+            max=self.emb_soft_max,
         )
+        return a
 
     def _furthest_word(self, input_emb: Tensor) -> Tensor:
         """

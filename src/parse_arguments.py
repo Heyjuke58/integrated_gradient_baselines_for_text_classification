@@ -59,6 +59,13 @@ def parse_arguments() -> Tuple[Any, ...]:
         help="Which version auf IG should be used (vanilla 'ig' or discretized 'dig').",
     )
     parser.add_argument(
+        "--dig-strategy",
+        type=str,
+        dest="dig_strategy",
+        default="greedy",
+        help="Which strategy is used for DIG (one of ['greedy', 'maxcount']).",
+    )
+    parser.add_argument(
         "--steps",
         type=int,
         dest="steps",
@@ -86,6 +93,13 @@ def parse_arguments() -> Tuple[Any, ...]:
         help="Whether to visualize the comprehensiveness and log-odds for different k values of attributions over all examples.",
     )
     parser.set_defaults(viz_topk=True)
+    parser.add_argument(
+        "--viz-word-path",
+        dest="viz_word_path",
+        action="store_true",
+        help="Whether to visualize the discrete word paths from informationless baseline to actual input.",
+    )
+    parser.set_defaults(viz_word_path=False)
 
     args = parser.parse_args()
     if "-" in args.examples:
@@ -110,10 +124,12 @@ def parse_arguments() -> Tuple[Any, ...]:
         args.baselines,
         args.models,
         args.version_ig,
+        args.dig_strategy,
         args.steps,
         args.seed,
         args.viz_attr,
         args.viz_topk,
+        args.viz_word_path,
     )
 
 

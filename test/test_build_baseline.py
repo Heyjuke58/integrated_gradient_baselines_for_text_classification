@@ -82,7 +82,7 @@ class TestBaselineBuilder(unittest.TestCase):
         A fake embedding of all 0.1 should be given a baseline of all ~-0.25 (emb_min)
         """
         input_emb = torch.full((6, 768), 0.1)
-        emb_min = self.bb.emb_mean - 2.58 * self.bb.emb_std
+        emb_min = self.bb.emb_soft_min
         baseline_emb = self.bb._furthest_embed(input_emb)
 
         self.assertLess(emb_min, 0.2)
@@ -141,12 +141,9 @@ class TestBaselineBuilder(unittest.TestCase):
 
     def test_gaussian(self):
         """
-        Gaussian Baseline should not be too different from input.
+        Gaussian Baseline should not be too different from input:
+        Means over all embedding dims of original and baseline should be similar.
         """
-        input_emb = torch.zeros((1, 768), device=DEV)
-        distant_emb = torch.full((1, 768), sqrt(2 / pi), device=DEV)
+        input_emb = torch.full((1, 768), 0.1, device=DEV)
         bl_emb = self.bb._gaussian(input_emb)
-        for i in range(bl_emb.shape[0]):
-            for j in range(i + 1, bl_emb.shape[0]):
-                # self.assertTrue(torch.cdist(bl_emb[i], bl_emb[j]))
-                pass
+        self.assertAlmostEqual(torch.mean(input_emb).item(), torch.mean(bl_emb).item())

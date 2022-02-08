@@ -81,11 +81,32 @@ def visualize_attrs(
 
 def embedding_histogram(embeddings: Tensor) -> None:
     flattened = torch.flatten(embeddings).detach().cpu().numpy()
+    mu = np.mean(flattened)
+    sigma = np.std(flattened)
+    top = mu + 2.58 * sigma
+    bot = mu - 2.58 * sigma
+    count = np.sum((flattened > bot) & (flattened < top))
+
+    flattened_sorted = np.sort(flattened)
+    n_outliers = round(len(flattened) * 0.001)
+    soft_top = flattened_sorted[n_outliers]
+    soft_bot = flattened_sorted[-n_outliers]
+
     print(f"{np.min(flattened)=}")
     print(f"{np.max(flattened)=}")
-    print(f"{np.mean(flattened)=}")
-    print(f"{np.std(flattened)=}")
+    print(f"{mu=}")
+    print(f"{sigma=}")
+    print(f"{top=}")
+    print(f"{bot=}")
+    print(f"{soft_top=}")
+    print(f"{soft_bot=}")
+    print(f"count inside inteval: {count} ({(100 * count) / len(flattened):.2f}%)")
     fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+    ax.axvline(mu, color="black")
+    ax.axvline(soft_top, color="green")
+    ax.axvline(soft_bot, color="green")
+    ax.axvline(top, color="red")
+    ax.axvline(bot, color="red")
     ax.hist(flattened, bins=1000)
     plt.tight_layout()
     plt.show()

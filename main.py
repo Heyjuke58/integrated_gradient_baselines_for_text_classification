@@ -40,10 +40,12 @@ def main(
     baselines: List[str],
     models: List[str],
     version_ig: str,
+    dig_strategy: str,
     steps: int,
     seed: int,
     viz_attr: bool,
     viz_topk: bool,
+    viz_word_path: bool,
 ) -> None:
     """
     :param examples: list of indices for samples from the sst2 validation set to be classified and explained.
@@ -73,9 +75,9 @@ def main(
         token_emb_helper = TokenEmbeddingHelper(model, model_str)
 
         # plot histogram
-        # all_word_embeddings = get_word_embeddings(model, model_str)
-        # embedding_histogram(all_word_embeddings)
-        # continue
+        all_word_embeddings = get_word_embeddings(model, model_str)
+        embedding_histogram(all_word_embeddings)
+        continue
 
         # choose IG version
         ig: Union[CustomIntegratedGradients, DiscretizedIntegratedGradients]
@@ -132,7 +134,19 @@ def main(
                     (attrs,), (word_paths,) = ig._attribute(
                         inputs=input_emb, baselines=baseline, n_steps=steps
                     )
-                    word_paths_discretized = ()
+                    if viz_word_path:
+                        word_paths_discretized = defaultdict(list)
+                        for word_path in word_paths:
+                            for i, word in enumerate(word_path):
+                                word_paths_discretized[i].append(
+                                    token_emb_helper.get_closest_by_token_embed_for_embed(word)
+                                )
+                        wp_disc_actual_words = {
+                            i: tokenizer.convert_ids_to_tokens(
+                                [token_emb_helper.get_token_id(word) for word in word_path]
+                            )
+                            for i, word_path in word_paths_discretized.items()
+                        }
                 elif version_ig == "dig":
                     # attributions for one single sentence
                     attrs = []
@@ -151,8 +165,13 @@ def main(
                         DEV,
                         auxiliary_data,
                         steps=steps - 2,
-                        strategy="greedy",
+                        strategy=dig_strategy,
                     )
+                    if viz_word_path:
+                        wp_disc_actual_words = {
+                            i: tokenizer.convert_ids_to_tokens([word.item() for word in word_path])
+                            for i, word_path in enumerate(word_paths)
+                        }
                     # TODO: maybe add additional forward args to attribute
                     attrs = ig.attribute(scaled_features=scaled_features, n_steps=steps)
                 else:
