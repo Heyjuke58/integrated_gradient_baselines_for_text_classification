@@ -81,7 +81,7 @@ def main(
 
         token_emb_helper = TokenEmbeddingHelper(model, model_str)
 
-        # plot histogram
+        # plot histogram of embedding values (used later for furthest embeddings)
         # all_word_embeddings = get_word_embeddings(model, model_str)
         # embedding_histogram(all_word_embeddings)
         # continue
@@ -173,12 +173,6 @@ def main(
                     baseline_ids = [
                         token_emb_helper.get_token_id(base_emb) for base_emb in baseline[0]
                     ]
-                    # TODO hack for pad token baseline
-                    # baseline_ids = (
-                    #     [tokenizer.cls_token_id]
-                    #     + [tokenizer.pad_token_id] * (baseline.shape[1] - 2)
-                    #     + [tokenizer.sep_token_id]
-                    # )
                     scaled_features, word_paths = scale_inputs(
                         input_ids,
                         baseline_ids,
@@ -229,6 +223,7 @@ def main(
                         f"IG version should be one of ['ig', 'dig']. Instead it is {version_ig}"
                     )
 
+                # sum of cumulative gradients:
                 summed_attrs = torch.sum(torch.abs(attrs), dim=2).squeeze(0)
                 bl_attrs[baseline_str] = summed_attrs.detach().cpu().numpy()
 

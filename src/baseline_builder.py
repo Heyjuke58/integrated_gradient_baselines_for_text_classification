@@ -11,13 +11,13 @@ from src.token_embedding_helper import TokenEmbeddingHelper
 # we need these for certain baseline computations
 EMB_STATS = {
     "distilbert": {
-        # "mean": -0.03833248,
+        "mean": -0.03833248,
         # "std": 0.046996452,
         "soft_min": -0.19720751,
         "soft_max": 0.19051318,
     },
     "bert": {
-        # "mean": -0.028025009,
+        "mean": -0.028025009,
         # "std": 0.042667598,
         "soft_min": -0.17209561,
         "soft_max": 0.14460362,
@@ -54,6 +54,7 @@ class BaselineBuilder:
         self.emb_soft_min = EMB_STATS[model_str]["soft_min"]
         self.emb_soft_max = EMB_STATS[model_str]["soft_max"]
         self.emb_middle = (self.emb_soft_max + self.emb_soft_min) / 2
+        self.emb_mean = EMB_STATS[model_str]["mean"]
         # self.emb_mean = EMB_STATS[model_str]["mean"]
         # self.emb_std = EMB_STATS[model_str]["std"]
         self.rngesus = torch.Generator(device=device).manual_seed(seed)
