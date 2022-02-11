@@ -177,10 +177,11 @@ def scale_inputs(
         word_path = find_word_path(
             input_ids[idx], ref_input_ids[idx], word_idx_map, word_features, adj, steps=steps, strategy=strategy
         )
-        word_paths.append(word_path)
         monotonic_embs = make_monotonic_path(
             word_path, ref_input_ids[idx], word_features, steps=steps, factor=factor
         )
+        word_path.append(ref_input_ids[idx])
+        word_paths.append(word_path)
         all_path_embs.append(monotonic_embs)
     all_path_embs = torch.tensor(
         np.stack(all_path_embs, axis=1), dtype=torch.float, device=device, requires_grad=True

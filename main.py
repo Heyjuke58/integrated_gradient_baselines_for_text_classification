@@ -3,9 +3,11 @@ from torch.nn.functional import softmax
 from typing import List, Dict, Union
 from collections import defaultdict
 
+import numpy as np
 import torch
 from datasets.load import load_dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from sklearn.decomposition import PCA
 
 from src.baseline_builder import BaselineBuilder
 from src.helper_functions import (
@@ -17,7 +19,12 @@ from src.helper_functions import (
     stringify_label,
 )
 from src.parse_arguments import MODEL_STRS, parse_arguments
-from src.visualization import embedding_histogram, visualize_attrs, visualize_ablation_scores
+from src.visualization import (
+    embedding_histogram,
+    visualize_attrs,
+    visualize_ablation_scores,
+    visualize_word_path,
+)
 from src.dig import DiscretizedIntegratedGradients
 from src.monotonic_paths import scale_inputs
 from src.custom_ig import CustomIntegratedGradients
@@ -75,9 +82,9 @@ def main(
         token_emb_helper = TokenEmbeddingHelper(model, model_str)
 
         # plot histogram
-        all_word_embeddings = get_word_embeddings(model, model_str)
-        embedding_histogram(all_word_embeddings)
-        continue
+        # all_word_embeddings = get_word_embeddings(model, model_str)
+        # embedding_histogram(all_word_embeddings)
+        # continue
 
         # choose IG version
         ig: Union[CustomIntegratedGradients, DiscretizedIntegratedGradients]
@@ -135,18 +142,31 @@ def main(
                         inputs=input_emb, baselines=baseline, n_steps=steps
                     )
                     if viz_word_path:
-                        word_paths_discretized = defaultdict(list)
+                        pca = PCA(n_components=2)
+                        pca.fit(get_word_embeddings(model, model_str).detach().cpu().numpy())
+                        wp_disc_emb = defaultdict(list)
                         for word_path in word_paths:
                             for i, word in enumerate(word_path):
-                                word_paths_discretized[i].append(
+                                wp_disc_emb[i].append(
                                     token_emb_helper.get_closest_by_token_embed_for_embed(word)
+                                    .detach()
+                                    .cpu()
+                                    .numpy()
                                 )
                         wp_disc_actual_words = {
                             i: tokenizer.convert_ids_to_tokens(
                                 [token_emb_helper.get_token_id(word) for word in word_path]
                             )
-                            for i, word_path in word_paths_discretized.items()
+                            for i, word_path in wp_disc_emb.items()
                         }
+                        # word_paths has shape of (steps, words, emb size)
+                        # in this case the second word (index 1) is visulized
+                        visualize_word_path(
+                            np.asarray([emb.detach().cpu().numpy() for emb in word_paths[:, 1, :]]),
+                            np.asarray(wp_disc_emb[1]),
+                            wp_disc_actual_words[1],
+                            pca,
+                        )
                 elif version_ig == "dig":
                     # attributions for one single sentence
                     attrs = []
@@ -168,10 +188,40 @@ def main(
                         strategy=dig_strategy,
                     )
                     if viz_word_path:
+                        pca = PCA(n_components=2)
+                        pca.fit(get_word_embeddings(model, model_str).detach().cpu().numpy())
                         wp_disc_actual_words = {
-                            i: tokenizer.convert_ids_to_tokens([word.item() for word in word_path])
+                            i: tokenizer.convert_ids_to_tokens(
+                                [
+                                    word.item() if isinstance(word, torch.Tensor) else word
+                                    for word in word_path
+                                ]
+                            )
                             for i, word_path in enumerate(word_paths)
                         }
+                        # for i, wp in wp_disc_actual_words.items():
+                        #     if i != 0 and i != len(wp_disc_actual_words) - 1:
+                        #         wp.append(pad_emb.detach().cpu())
+                        wp_disc_emb = {
+                            i: [
+                                token_emb_helper.get_emb(word.item()).detach().cpu().numpy()
+                                if isinstance(word, torch.Tensor)
+                                else token_emb_helper.get_emb(word).detach().cpu().numpy()
+                                for word in word_path
+                            ]
+                            for i, word_path in enumerate(word_paths)
+                        }
+                        # scaled_features has shape of (steps, words, emb size)
+                        # in this case the second word (index 1) is visulized
+                        # reverse the second two lists so that baseline is the first and input word is the last s.src/monotonic_paths.py line 149
+                        visualize_word_path(
+                            np.asarray(
+                                [emb.detach().cpu().numpy() for emb in scaled_features[:, 1, :]]
+                            ),
+                            np.asarray(wp_disc_emb[1][::-1]),
+                            wp_disc_actual_words[1][::-1],
+                            pca,
+                        )
                     # TODO: maybe add additional forward args to attribute
                     attrs = ig.attribute(scaled_features=scaled_features, n_steps=steps)
                 else:
@@ -209,12 +259,7 @@ def main(
                         )
             if viz_attr:
                 visualize_attrs(
-                    bl_attrs,
-                    prediction_str,
-                    model_str,
-                    version_ig,
-                    x["sentence"],
-                    words,
+                    bl_attrs, prediction_str, model_str, version_ig, x["sentence"], words
                 )
         if viz_topk:
             avg_comps: Dict[str, Dict[float, float]] = get_avg_scores(comps)

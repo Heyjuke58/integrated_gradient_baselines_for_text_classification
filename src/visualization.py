@@ -140,3 +140,31 @@ def visualize_ablation_scores(
         plt.savefig(Path("figures") / Path(save_str))
     else:
         plt.show()
+
+def visualize_embedding_space() -> None:
+    
+
+def visualize_word_path(
+    word_path_emb: np.ndarray,
+    word_path_discretized_emb: np.ndarray,
+    word_path: List[str],
+    pca,
+    save_str: Optional[str] = None,
+) -> None:
+    fig, ax = plt.subplots(1, 1, figsize=(16, 8), gridspec_kw={"hspace": 0})
+    word_path_emb = pca.transform(word_path_emb)
+    word_path_discretized_emb = pca.transform(word_path_discretized_emb)
+    ax.plot(word_path_emb[:,0], word_path_emb[:,1], marker='o', label='Actual interpolation')
+    ax.plot(word_path_discretized_emb[:,0], word_path_discretized_emb[:,1], marker='o', label='Discretized interpolation')
+    plt.legend()
+    last_word = None
+    for i, word in enumerate(word_path):
+        if word != last_word:
+            ax.annotate(word, (word_path_discretized_emb[i, 0], word_path_discretized_emb[i, 1]))
+            last_word = word
+    if save_str is not None:
+        if not save_str.endswith(".png"):
+            save_str += ".png"
+        plt.savefig(Path("figures") / Path(save_str))
+    else:
+        plt.show()
