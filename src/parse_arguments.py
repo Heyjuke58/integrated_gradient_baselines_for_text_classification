@@ -21,6 +21,7 @@ BASELINE_STRS = {
     "avg_word_embed",
     "avg_word",
 }
+DISCRETE_BASELINES = {"pad_embed", "furthest_word", "avg_word"}
 
 
 def parse_arguments() -> Tuple[Any, ...]:
@@ -31,7 +32,7 @@ def parse_arguments() -> Tuple[Any, ...]:
         type=str,
         dest="examples",
         default="0,1,2",
-        help="Example indices used for IG evaluation. Can either be specified by ints seperated by ',' for explicit examples or be a range i.e. the first 1000 examples: -e \"0-1000\" ",
+        help="Example indices used for IG evaluation. Can either be specified by ints seperated by ',' for explicit examples or be a range i.e. the first 100 examples: -e \"0-100\" ",
     )
     parser.add_argument(
         "-b",
@@ -40,7 +41,7 @@ def parse_arguments() -> Tuple[Any, ...]:
         dest="baselines",
         default="furthest_embed,pad_embed,zero_embed,blurred_embed,flipped_blurred_embed,both_blurred_embed,uniform,gaussian",
         # default="blurred_embed,flipped_blurred_embed,both_blurred_embed",
-        help="Type of baseline to be used for Integrated Gradients.",
+        help=f"Type of baseline to be used for Integrated Gradients or Discretized Integrated Gradients. Allowed values: {BASELINE_STRS}",
     )
     parser.add_argument(
         "-m",
@@ -48,7 +49,7 @@ def parse_arguments() -> Tuple[Any, ...]:
         type=str,
         dest="models",
         default="distilbert,bert",
-        help="Models that should be interpreted.",
+        help=f"Models that should be interpreted. Allowed values: {set(MODEL_STRS.keys())}",
     )
     parser.add_argument(
         "-v",
@@ -110,7 +111,11 @@ def parse_arguments() -> Tuple[Any, ...]:
         args.examples = list(map(int, args.examples.split(",")))
 
     args.baselines = valid_parse(
-        args.baselines, possible_values=list(BASELINE_STRS), arg_type="baselines"
+        args.baselines,
+        possible_values=list(BASELINE_STRS)
+        if args.version_ig == "ig"
+        else list(DISCRETE_BASELINES),
+        arg_type="baselines",
     )
     args.models = valid_parse(
         args.models, possible_values=list(MODEL_STRS.keys()), arg_type="models"

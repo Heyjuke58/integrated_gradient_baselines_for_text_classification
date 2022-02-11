@@ -146,4 +146,13 @@ class TestBaselineBuilder(unittest.TestCase):
         """
         input_emb = torch.full((1, 768), 0.1, device=DEV)
         bl_emb = self.bb._gaussian(input_emb)
-        self.assertAlmostEqual(torch.mean(input_emb).item(), torch.mean(bl_emb).item())
+        # self.assertAlmostEqual(torch.std(bl_emb).item(), 0.1)
+
+    def test_avg_word_embed(self):
+        """
+        Avg embedding should have the expected average value.
+        """
+        input_emb = torch.zeros((1, 768), dtype=torch.float, device=DEV)
+        bl_emb = self.bb._avg_word_embed(input_emb)
+        self.assertAlmostEqual(torch.mean(bl_emb).item(), self.bb.emb_mean)
+        # self.assertAlmostEqual(torch.std(bl_emb).item(), 0.1)

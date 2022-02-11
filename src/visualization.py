@@ -140,3 +140,14 @@ def visualize_ablation_scores(
         plt.savefig(Path("figures") / Path(save_str))
     else:
         plt.show()
+
+
+def visualize_word_path(word_path: List[Tensor], save_str: Optional[str] = None) -> None:
+    fig, ax = plt.subplots(1, 1, figsize=(16, 8), gridspec_kw={"hspace": 0})
+
+    if save_str is not None:
+        if not save_str.endswith(".png"):
+            save_str += ".png"
+        plt.savefig(Path("figures") / Path(save_str))
+    else:
+        plt.show()
