@@ -2,6 +2,7 @@ from functools import partial
 from torch.nn.functional import softmax
 from typing import List, Dict, Union
 from collections import defaultdict
+import warnings
 
 import numpy as np
 import torch
@@ -23,8 +24,9 @@ from src.visualization import (
     embedding_histogram,
     visualize_attrs,
     visualize_ablation_scores,
-    visualize_word_path,
+    visualize_word_paths,
     visualize_embedding_space,
+    visualize_word_path_table,
 )
 from src.dig import DiscretizedIntegratedGradients
 from src.monotonic_paths import scale_inputs
@@ -41,6 +43,8 @@ from src.token_embedding_helper import TokenEmbeddingHelper
 K = [0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 DEV = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# suppress missing font character warnings
+warnings.filterwarnings("ignore")
 
 
 def main(
@@ -84,7 +88,7 @@ def main(
         token_emb_helper = TokenEmbeddingHelper(model, model_str)
 
         # plot histogram of embedding values (used later for furthest embeddings)
-        # all_word_embeddings = get_word_embeddings(model, model_str)
+        # all_word_embeddings = get_word_embeddings(model, model_str, trim_unused=True)
         # embedding_histogram(all_word_embeddings)
         # continue
 
@@ -114,7 +118,9 @@ def main(
 
         # PCA for word path and embedding space visualization
         pca = PCA(n_components=2)
-        all_word_emb = get_word_embeddings(model, model_str).detach().cpu().numpy()
+        all_word_emb = (
+            get_word_embeddings(model, model_str, trim_unused=True).detach().cpu().numpy()
+        )
         pca.fit(all_word_emb)
 
         if viz_emb_space:
@@ -124,7 +130,7 @@ def main(
                 {
                     "PAD": all_word_emb[tokenizer.pad_token_id],
                     "ZERO": np.zeros((768,), dtype=np.float32),
-                    "AVG": BaselineBuilder.avg_word_embed(token_emb_helper)
+                    "AVG": BaselineBuilder.avg_word_embed(model, model_str)
                     .squeeze()
                     .detach()
                     .cpu()
@@ -138,12 +144,15 @@ def main(
                 },
             )
 
-        l = len(examples)
         for example in examples:
-            print(f"EXAMPLE: {example + 1}/{l}")
+            print(f"EXAMPLE: {example}")
             x = dataset[example]
             input = tokenizer(x["sentence"], padding=True, return_tensors="pt").to(DEV)
             input_ids = input["input_ids"][0].cpu()
+            # skip too long sentences for word path viz
+            if len(input_ids) > 8:
+                print(f"skipped {example}")
+                continue
             words = tokenizer.convert_ids_to_tokens(list(map(int, input_ids)))
             # formatted_input = (input["input_ids"], input["attention_mask"])
             input_emb = construct_word_embedding(model, model_str, input["input_ids"]).to(DEV)
@@ -158,7 +167,7 @@ def main(
             for baseline_str in baselines:
                 print(f"BASELINE: {baseline_str}")
                 bb = BaselineBuilder(
-                    model_str, seed, token_emb_helper, cls_emb, sep_emb, pad_emb, DEV
+                    model, model_str, seed, token_emb_helper, cls_emb, sep_emb, pad_emb, DEV
                 )
                 baseline = bb.build_baseline(input_emb, b_type=baseline_str).to(DEV)
 
@@ -181,21 +190,39 @@ def main(
                                     .cpu()
                                     .numpy()
                                 )
-                        wp_disc_actual_words = {
+                        wp_disc_actual_words = {  # dict to get order right
                             i: tokenizer.convert_ids_to_tokens(
                                 [token_emb_helper.get_token_id(word) for word in word_path]
                             )
                             for i, word_path in wp_disc_emb.items()
                         }
                         # word_paths has shape of (steps, words, emb size)
-                        # in this case the second word (index 1) is visulized
-                        visualize_word_path(
-                            np.asarray([emb.detach().cpu().numpy() for emb in word_paths[:, 1, :]]),
-                            np.asarray(wp_disc_emb[1]),
-                            wp_disc_actual_words[1],
+                        # we visualize all words in one image:
+                        last_word = word_paths.shape[1] - 1
+                        visualize_word_paths(
+                            np.swapaxes(
+                                np.asarray(
+                                    [
+                                        emb.detach().cpu().numpy()
+                                        for emb in word_paths[:, 1:last_word, :]
+                                    ]
+                                ),
+                                0,
+                                1,
+                            ),
+                            np.asarray([wp_disc_emb[i] for i in range(1, last_word)]),
+                            [wp_disc_actual_words[i] for i in range(1, last_word)],
+                            all_word_emb,
                             pca,
                             model_str,
                             version_ig,
+                            save_str=f"wordpath_ig_{model_str}_{baseline_str}_{example}.png",
+                        )
+                        visualize_word_path_table(
+                            [wp_disc_actual_words[i] for i in range(1, last_word)],
+                            model_str,
+                            version_ig,
+                            baseline_str,
                         )
                 elif version_ig == "dig":
                     # attributions for one single sentence
@@ -236,17 +263,33 @@ def main(
                             for i, word_path in enumerate(word_paths)
                         }
                         # scaled_features has shape of (steps, words, emb size)
-                        # in this case the second word (index 1) is visulized
+                        # we visualize all words in one image:
                         # reverse the second two lists so that baseline is the first and input word is the last s.src/monotonic_paths.py line 149
-                        visualize_word_path(
-                            np.asarray(
-                                [emb.detach().cpu().numpy() for emb in scaled_features[:, 1, :]]
+                        last_word = len(word_paths) - 1
+                        visualize_word_paths(
+                            np.swapaxes(
+                                np.asarray(
+                                    [
+                                        emb.detach().cpu().numpy()
+                                        for emb in scaled_features[:, 1:last_word, :]
+                                    ]
+                                ),
+                                0,
+                                1,
                             ),
-                            np.asarray(wp_disc_emb[1][::-1]),
-                            wp_disc_actual_words[1][::-1],
+                            np.asarray([wp_disc_emb[i][::-1] for i in range(1, last_word)]),
+                            [wp_disc_actual_words[i][::-1] for i in range(1, last_word)],
+                            all_word_emb,
                             pca,
                             model_str,
                             version_ig,
+                            save_str=f"wordpath_dig_{model_str}_{baseline_str}_{example}.png",
+                        )
+                        visualize_word_path_table(
+                            [wp_disc_actual_words[i][::-1] for i in range(1, last_word)],
+                            model_str,
+                            version_ig,
+                            baseline_str,
                         )
                     attrs = ig.attribute(scaled_features=scaled_features, n_steps=steps)
                 else:

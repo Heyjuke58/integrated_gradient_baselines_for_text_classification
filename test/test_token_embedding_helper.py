@@ -34,11 +34,18 @@ class TestTokenEmbeddingHelper(unittest.TestCase):
         )
         self.token_emb_helper = TokenEmbeddingHelper(self.model, self.model_str)
         self.bb = BaselineBuilder(
-            self.model_str, 33, self.token_emb_helper, self.cls_emb, self.sep_emb, self.pad_emb, DEV
+            self.model,
+            self.model_str,
+            33,
+            self.token_emb_helper,
+            self.cls_emb,
+            self.sep_emb,
+            self.pad_emb,
+            DEV,
         )
 
         sentence = "good movie ."
-        self.inputs_tok = self.tokenizer(sentence, padding=True, return_tensors="pt")
+        self.inputs_tok = self.tokenizer(sentence, padding=True, return_tensors="pt").to(DEV)
         assert self.inputs_tok["input_ids"].shape == (1, 5)
 
         self.input_emb = construct_word_embedding(
@@ -90,7 +97,7 @@ class TestTokenEmbeddingHelper(unittest.TestCase):
 
         # check whether top3 has only smaller values than top10 after the first 3 elements
         for x, y in itertools.product(
-            [dist for _, dist, __ in top3], [dist for _, dist, __ in top10[3:]]
+            [dist for _, _, dist, _ in top3], [dist for _, _, dist, _ in top10[3:]]
         ):
             self.assertTrue(x < y)
 
@@ -120,5 +127,7 @@ class TestTokenEmbeddingHelper(unittest.TestCase):
             for i, word_path in wp_disc_emb.items()
         }
         for j, word_emb in enumerate(word_paths[:, 1, :]):
-            top3 = self.token_emb_helper.get_topk_closest_by_token_embed_for_embed(3, word_emb, self.tokenizer)
+            top3 = self.token_emb_helper.get_topk_closest_by_token_embed_for_embed(
+                3, word_emb, self.tokenizer
+            )
             self.assertTrue(top3[0][0] == wp_disc_token_ids[1][j])

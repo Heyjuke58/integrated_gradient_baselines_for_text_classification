@@ -160,6 +160,71 @@ def visualize_embedding_space(
     plt.show()
 
 
+def visualize_word_paths(
+    word_path_emb: np.ndarray,  # (w, l, 768)
+    word_path_discretized_emb: np.ndarray,  # (w, l, 768)
+    word_path: List[List[str]],  # [["PAD", ..., "good"], ["PAD",... "movie"]]
+    cloud_emb: np.ndarray,  # embs of full vocabulary
+    pca,
+    model_str: str,
+    version_ig: str,
+    save_str: Optional[str] = None,
+):
+    fig, ax = plt.subplots(1, 1, figsize=(16, 9), gridspec_kw={"hspace": 0})
+
+    # make vocabulary cloud in background:
+    cloud_pca = pca.transform(cloud_emb)
+    ax.scatter(
+        cloud_pca[:, 0],
+        cloud_pca[:, 1],
+        color="lightgray",
+        marker=".",
+        edgecolors=None,
+        linewidths=0,
+    )
+
+    # visualize word paths:
+    cmap = cm.get_cmap("tab10")
+    for p, (path, disc_path, words) in enumerate(
+        zip(word_path_emb, word_path_discretized_emb, word_path)
+    ):
+        path_pca = pca.transform(path)
+        disc_path_pca = pca.transform(disc_path)
+        ax.plot(
+            path_pca[:, 0],
+            path_pca[:, 1],
+            color=cmap(p),
+            marker="o",
+            label=f"{words[-1]}: Actual interpolation",
+        )
+        ax.plot(
+            disc_path_pca[:, 0],
+            disc_path_pca[:, 1],
+            color=cmap(p),
+            ls="--",
+            marker="o",
+            label=f"{words[-1]}: Discretized interpolation",
+        )
+        last_word = None
+        for i, word in enumerate(words):
+            if word != last_word:
+                ax.annotate(word, (disc_path_pca[i, 0], disc_path_pca[i, 1]))
+                last_word = word
+    plt.legend()
+    plt.title(
+        f"Interpolation path of one word to a baseline and decoding to the closest-by tokens (2-dimensional PCA)\n{version_ig.upper()} with {model_str.upper()} model"
+    )
+    ax.set_xlabel("1st PCA dimension")
+    ax.set_ylabel("2nd PCA dimension")
+    plt.tight_layout()
+    if save_str is not None:
+        if not save_str.endswith(".png"):
+            save_str += ".png"
+        plt.savefig(Path("figures") / Path(save_str))
+    else:
+        plt.show()
+
+
 def visualize_word_path(
     word_path_emb: np.ndarray,
     word_path_discretized_emb: np.ndarray,
@@ -190,6 +255,38 @@ def visualize_word_path(
         if word != last_word:
             ax.annotate(word, (word_path_discretized_emb[i, 0], word_path_discretized_emb[i, 1]))
             last_word = word
+    if save_str is not None:
+        if not save_str.endswith(".png"):
+            save_str += ".png"
+        plt.savefig(Path("figures") / Path(save_str))
+    else:
+        plt.show()
+
+
+def visualize_word_path_table(
+    word_path: List[List[str]],  # [["PAD", ..., "good"], ["PAD",... "movie"]]
+    model_str: str,
+    version_ig: str,
+    baseline_str: str,
+    save_str: Optional[str] = None,
+) -> None:
+    description = [""] * len(word_path[0])
+    description[0] = "BASELINE"
+    description[-1] = "ORIGINAL"
+    word_path = [description] + word_path
+    np_word_path = np.asarray(word_path).T[::-1, :]
+    fig, ax = plt.subplots()
+    ax.axis("off")
+    table = ax.table(cellText=np_word_path, loc="center", edges="open", cellLoc="center")
+    table.auto_set_font_size(False)
+    table.set_fontsize(24)
+    table[(0, 0)].get_text().set_color("red")
+    table[(len(word_path[0]) - 1), 0].get_text().set_color("red")
+    plt.title(
+        f"Closest by tokens of interpolated paths.\n{version_ig.upper()} for {model_str.upper()} (Baseline: {baseline_str})",
+        fontsize=24,
+    )
+
     if save_str is not None:
         if not save_str.endswith(".png"):
             save_str += ".png"

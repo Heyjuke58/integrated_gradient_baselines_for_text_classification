@@ -18,8 +18,27 @@ def construct_word_embedding(model, model_str: str, input_ids: Tensor):
     return getattr(model, model_str).embeddings.word_embeddings(input_ids)
 
 
-def get_word_embeddings(model, model_str: str):
-    return getattr(model, model_str).embeddings.word_embeddings.weight
+def get_word_embeddings(model, model_str: str, trim_unused: bool = False):
+    """
+    word embeddings of whole vocabulary. Trim unused only works for the bert vocab.
+
+    :param trim_unused: If false, embeddings of unused tokens are replaced so that they are out of the way (all 1s)
+    If True, these embeddings are simply removed. Note that you cannot use those embeddings for decoding then.
+    """
+    # [0:1]     PAD
+    # [1:100]   unused
+    # [100:104] UNK CLS SEP MASK
+    # [104:999] unused
+    # [999:]    vocabulary
+    with torch.no_grad():
+        orig = getattr(model, model_str).embeddings.word_embeddings.weight.clone()
+        if trim_unused:
+            mod = torch.cat((orig[0:1], orig[100:104], orig[999:]))
+        else:
+            mod = orig
+            mod[1:100] = 1.0
+            mod[104:999] = 1.0
+        return mod
 
 
 def predict(model, inputs_embeds, attention_mask=None):

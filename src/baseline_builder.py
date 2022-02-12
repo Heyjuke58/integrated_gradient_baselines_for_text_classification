@@ -6,21 +6,22 @@ from torch import Tensor
 
 from src.parse_arguments import BASELINE_STRS
 from src.token_embedding_helper import TokenEmbeddingHelper
+from src.helper_functions import get_word_embeddings
 
 # mean and std of all word embeddings for our two used models
 # we need these for certain baseline computations
 EMB_STATS = {
     "distilbert": {
-        "mean": -0.03833248,
+        "mean": -0.03877626,
         # "std": 0.046996452,
-        "soft_min": -0.19720751,
-        "soft_max": 0.19051318,
+        "soft_min": -0.19807547,
+        "soft_max": 0.18176733,
     },
     "bert": {
-        "mean": -0.028025009,
+        "mean": -0.028227692,
         # "std": 0.042667598,
-        "soft_min": -0.17209561,
-        "soft_max": 0.14460362,
+        "soft_min": -0.1727944,
+        "soft_max": 0.14541733,
     },
 }
 
@@ -28,6 +29,7 @@ EMB_STATS = {
 class BaselineBuilder:
     def __init__(
         self,
+        model,
         model_str: str,
         seed: int,
         token_emb_helper: TokenEmbeddingHelper,
@@ -48,6 +50,8 @@ class BaselineBuilder:
         :param pad_emb: Embedding for the pad token
         """
         self.token_emb_helper = token_emb_helper
+        self.model = model
+        self.model_str = model_str
         self.cls_emb = cls_emb
         self.sep_emb = sep_emb
         self.pad_emb = pad_emb
@@ -213,20 +217,24 @@ class BaselineBuilder:
         )
         avg_word = self.token_emb_helper.get_closest_by_token_embed_for_embed(avg_word_embed[0])
         return avg_word.expand(input_emb.shape)
+        # return torch.cat([avg_word] * input_emb.shape[0], dim=0)
 
     def _avg_word_embed(self, input_emb: Tensor) -> Tensor:
         """
         Go over embeddings of whole vocabulary to calculate the "average" word embedding.
         Each word is weighted equally.
         """
-        # all_words = torch.stack(list(self.token_emb_helper.token_to_emb.values()))
-        # avg_word_embed = torch.mean(all_words, dim=0).expand(input_emb.shape)
-        # return avg_word_embed
 
-        return BaselineBuilder.avg_word_embed(self.token_emb_helper).expand(input_emb.shape)
+        return BaselineBuilder.avg_word_embed(self.model, self.model_str).expand(input_emb.shape)
+        # return torch.cat(
+        #     [BaselineBuilder.avg_word_embed(self.model, self.model_str).unsqueeze(0)]
+        #     * input_emb.shape[0],
+        #     dim=1,
+        # )
 
     @staticmethod
-    def avg_word_embed(teh) -> Tensor:
-        all_words = torch.stack(list(teh.token_to_emb.values()))
+    def avg_word_embed(model, model_str: str) -> Tensor:
+        all_words = get_word_embeddings(model, model_str, trim_unused=True)
+        # all_words = torch.stack(list(self.token_emb_helper.token_to_emb.values()))
         avg_word_embed = torch.mean(all_words, dim=0)
         return avg_word_embed

@@ -4,7 +4,7 @@ Examination of the use of different baseline techniques for integrated gradients
 
 ## How to run
 
-- install conda environment as provided by `environment.yml`
+- install conda environment as provided by `environment.yml` and activate it.
 - Precompute KNN:
 
 ```sh

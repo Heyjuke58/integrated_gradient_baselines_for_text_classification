@@ -30,6 +30,7 @@ class TestBaselineBuilder(unittest.TestCase):
         )
         self.teh = TokenEmbeddingHelper(self.model, self.model_str)
         self.bb = BaselineBuilder(
+            self.model,
             self.model_str,
             33,
             self.teh,
@@ -107,13 +108,13 @@ class TestBaselineBuilder(unittest.TestCase):
         With different seed, randomized baselines should be unequal.
         """
         bb1 = BaselineBuilder(
-            self.model_str, 33, self.teh, self.cls_emb, self.sep_emb, self.pad_emb, DEV
+            self.model, self.model_str, 33, self.teh, self.cls_emb, self.sep_emb, self.pad_emb, DEV
         )
         bb2 = BaselineBuilder(
-            self.model_str, 33, self.teh, self.cls_emb, self.sep_emb, self.pad_emb, DEV
+            self.model, self.model_str, 33, self.teh, self.cls_emb, self.sep_emb, self.pad_emb, DEV
         )
         bb3 = BaselineBuilder(
-            self.model_str, 42, self.teh, self.cls_emb, self.sep_emb, self.pad_emb, DEV
+            self.model, self.model_str, 42, self.teh, self.cls_emb, self.sep_emb, self.pad_emb, DEV
         )
         sentence = "hello world!"
         input_tok = self.tokenizer(sentence, padding=True, return_tensors="pt").to(DEV)
