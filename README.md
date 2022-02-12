@@ -25,3 +25,9 @@ python main.py --help
 - Analysis: `src/baselines` contains baseline definitions for 11 different baselines.
 - Evaluation: Comprehensiveness and Log-odds are implemented in `src/ablation_evaluation.py`. Visualization on by default. It is recommended to use many samples for this, e.g: `python main.py --e=0-50`
 - Extension: Implementation from codebase of original paper in `src/dig.py`. DIG only works with discrete baselines (`pad_embed`, `furthest_word`, `avg_word`). DIG can be toggled on by using the `-v=dig` option. The DIG strategy can be chosen with the `--dig-strategy=STRATEGY` option.
+
+## TODO
+
+- top 3 distances from paths
+- all paths in a sentence in one picture, with embedding cloud in background
+- find good samples

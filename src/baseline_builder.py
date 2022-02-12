@@ -219,6 +219,14 @@ class BaselineBuilder:
         Go over embeddings of whole vocabulary to calculate the "average" word embedding.
         Each word is weighted equally.
         """
-        all_words = torch.stack(list(self.token_emb_helper.token_to_emb.values()))
-        avg_word_embed = torch.mean(all_words, dim=0).expand(input_emb.shape)
+        # all_words = torch.stack(list(self.token_emb_helper.token_to_emb.values()))
+        # avg_word_embed = torch.mean(all_words, dim=0).expand(input_emb.shape)
+        # return avg_word_embed
+
+        return BaselineBuilder.avg_word_embed(self.token_emb_helper).expand(input_emb.shape)
+
+    @staticmethod
+    def avg_word_embed(teh) -> Tensor:
+        all_words = torch.stack(list(teh.token_to_emb.values()))
+        avg_word_embed = torch.mean(all_words, dim=0)
         return avg_word_embed

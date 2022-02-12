@@ -141,22 +141,50 @@ def visualize_ablation_scores(
     else:
         plt.show()
 
-def visualize_embedding_space() -> None:
-    
+
+def visualize_embedding_space(
+    word_emb: np.ndarray, pca, interesting_embs: Dict[str, np.ndarray]
+) -> None:
+    fig, ax = plt.subplots(1, 1, figsize=(16, 9), gridspec_kw={"hspace": 0})
+    word_emb = pca.transform(word_emb)
+    ax.scatter(word_emb[:, 0], word_emb[:, 1], alpha=0.2, marker=".", edgecolors=None, linewidths=0)
+
+    for word, emb in interesting_embs.items():
+        emb = pca.transform(np.expand_dims(emb, axis=0))
+        ax.annotate(word, (emb[:, 0], emb[:, 1]))
+
+    ax.set_xlabel("1st PCA dimension")
+    ax.set_ylabel("2nd PCA dimension")
+    plt.title("Different words in the embedding space (2-dimensional PCA)")
+    plt.savefig("figures/pca_embedding_space.png")
+    plt.show()
+
 
 def visualize_word_path(
     word_path_emb: np.ndarray,
     word_path_discretized_emb: np.ndarray,
     word_path: List[str],
     pca,
+    model_str: str,
+    version_ig: str,
     save_str: Optional[str] = None,
 ) -> None:
     fig, ax = plt.subplots(1, 1, figsize=(16, 8), gridspec_kw={"hspace": 0})
     word_path_emb = pca.transform(word_path_emb)
     word_path_discretized_emb = pca.transform(word_path_discretized_emb)
-    ax.plot(word_path_emb[:,0], word_path_emb[:,1], marker='o', label='Actual interpolation')
-    ax.plot(word_path_discretized_emb[:,0], word_path_discretized_emb[:,1], marker='o', label='Discretized interpolation')
+    ax.plot(word_path_emb[:, 0], word_path_emb[:, 1], marker="o", label="Actual interpolation")
+    ax.plot(
+        word_path_discretized_emb[:, 0],
+        word_path_discretized_emb[:, 1],
+        marker="o",
+        label="Discretized interpolation",
+    )
     plt.legend()
+    plt.title(
+        f"Interpolation path of one word to a baseline and decoding to the closest-by tokens (2-dimensional PCA)\n{version_ig.upper()} with {model_str.upper()} model"
+    )
+    ax.set_xlabel("1st PCA dimension")
+    ax.set_ylabel("2nd PCA dimension")
     last_word = None
     for i, word in enumerate(word_path):
         if word != last_word:

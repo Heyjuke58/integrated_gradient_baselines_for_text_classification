@@ -31,7 +31,7 @@ def parse_arguments() -> Tuple[Any, ...]:
         "--examples",
         type=str,
         dest="examples",
-        default="0,1,2",
+        default="0",
         help="Example indices used for IG evaluation. Can either be specified by ints seperated by ',' for explicit examples or be a range i.e. the first 100 examples: -e \"0-100\" ",
     )
     parser.add_argument(
@@ -70,7 +70,7 @@ def parse_arguments() -> Tuple[Any, ...]:
         "--steps",
         type=int,
         dest="steps",
-        default=32,
+        default=10,
         help="Number of interpolation steps for IG.",
     )
     parser.add_argument(
@@ -101,6 +101,13 @@ def parse_arguments() -> Tuple[Any, ...]:
         help="Whether to visualize the discrete word paths from informationless baseline to actual input.",
     )
     parser.set_defaults(viz_word_path=False)
+    parser.add_argument(
+        "--viz-emb-space",
+        dest="viz_emb_space",
+        action="store_true",
+        help="Whether to visualize the embedding space of all word embeddings using a PCA.",
+    )
+    parser.set_defaults(viz_emb_space=False)
 
     args = parser.parse_args()
     if "-" in args.examples:
@@ -135,6 +142,7 @@ def parse_arguments() -> Tuple[Any, ...]:
         args.viz_attr,
         args.viz_topk,
         args.viz_word_path,
+        args.viz_emb_space,
     )
 
 

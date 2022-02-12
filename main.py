@@ -24,6 +24,7 @@ from src.visualization import (
     visualize_attrs,
     visualize_ablation_scores,
     visualize_word_path,
+    visualize_embedding_space,
 )
 from src.dig import DiscretizedIntegratedGradients
 from src.monotonic_paths import scale_inputs
@@ -53,6 +54,7 @@ def main(
     viz_attr: bool,
     viz_topk: bool,
     viz_word_path: bool,
+    viz_emb_space: bool,
 ) -> None:
     """
     :param examples: list of indices for samples from the sst2 validation set to be classified and explained.
@@ -106,11 +108,35 @@ def main(
 
         print(f"USED EXAMPLES:")
         [
-            print(
-                f"[{stringify_label(dataset[example]['label'])}]: {dataset[example]['sentence']}"
-                for example in examples
-            )
+            print(f"[{stringify_label(dataset[example]['label'])}]: {dataset[example]['sentence']}")
+            for example in examples
         ]
+
+        # PCA for word path and embedding space visualization
+        pca = PCA(n_components=2)
+        all_word_emb = get_word_embeddings(model, model_str).detach().cpu().numpy()
+        pca.fit(all_word_emb)
+
+        if viz_emb_space:
+            visualize_embedding_space(
+                all_word_emb,
+                pca,
+                {
+                    "PAD": all_word_emb[tokenizer.pad_token_id],
+                    "ZERO": np.zeros((768,), dtype=np.float32),
+                    "AVG": BaselineBuilder.avg_word_embed(token_emb_helper)
+                    .squeeze()
+                    .detach()
+                    .cpu()
+                    .numpy(),
+                    "GOOD": all_word_emb[
+                        tokenizer("good", return_token_type_ids=True)["input_ids"][1]
+                    ],
+                    "BAD": all_word_emb[
+                        tokenizer("bad", return_token_type_ids=True)["input_ids"][1]
+                    ],
+                },
+            )
 
         l = len(examples)
         for example in examples:
@@ -137,13 +163,15 @@ def main(
                 baseline = bb.build_baseline(input_emb, b_type=baseline_str).to(DEV)
 
                 if version_ig == "ig":
-                    # attributions for a batch of sentences
+                    # attribution for a sentence
+                    # riemann_trapezoid is necessary, since this gives us alphas including 0 and 1
                     (attrs,), (word_paths,) = ig._attribute(
-                        inputs=input_emb, baselines=baseline, n_steps=steps
+                        inputs=input_emb,
+                        baselines=baseline,
+                        n_steps=steps,
+                        method="riemann_trapezoid",
                     )
                     if viz_word_path:
-                        pca = PCA(n_components=2)
-                        pca.fit(get_word_embeddings(model, model_str).detach().cpu().numpy())
                         wp_disc_emb = defaultdict(list)
                         for word_path in word_paths:
                             for i, word in enumerate(word_path):
@@ -166,6 +194,8 @@ def main(
                             np.asarray(wp_disc_emb[1]),
                             wp_disc_actual_words[1],
                             pca,
+                            model_str,
+                            version_ig,
                         )
                 elif version_ig == "dig":
                     # attributions for one single sentence
@@ -215,8 +245,9 @@ def main(
                             np.asarray(wp_disc_emb[1][::-1]),
                             wp_disc_actual_words[1][::-1],
                             pca,
+                            model_str,
+                            version_ig,
                         )
-                    # TODO: maybe add additional forward args to attribute
                     attrs = ig.attribute(scaled_features=scaled_features, n_steps=steps)
                 else:
                     raise Exception(
