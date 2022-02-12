@@ -1,10 +1,19 @@
+import itertools
 import unittest
+from functools import partial
+from collections import defaultdict
+
+import numpy as np
 import torch
 from parameterized import parameterized_class
-from src.helper_functions import construct_word_embedding
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from src.baseline_builder import BaselineBuilder
+from src.custom_ig import CustomIntegratedGradients
+from src.helper_functions import construct_word_embedding, nn_forward_fn
 from src.parse_arguments import MODEL_STRS
 from src.token_embedding_helper import TokenEmbeddingHelper
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+DEV = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 @parameterized_class([{"model_str": "distilbert"}, {"model_str": "bert"}])
@@ -13,20 +22,30 @@ class TestTokenEmbeddingHelper(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_STRS[self.model_str])
         self.model = AutoModelForSequenceClassification.from_pretrained(
             MODEL_STRS[self.model_str], return_dict=False
+        ).to(DEV)
+        self.cls_emb = construct_word_embedding(
+            self.model, self.model_str, torch.tensor([[self.tokenizer.cls_token_id]], device=DEV)
+        )
+        self.sep_emb = construct_word_embedding(
+            self.model, self.model_str, torch.tensor([[self.tokenizer.sep_token_id]], device=DEV)
+        )
+        self.pad_emb = construct_word_embedding(
+            self.model, self.model_str, torch.tensor([[self.tokenizer.pad_token_id]], device=DEV)
         )
         self.token_emb_helper = TokenEmbeddingHelper(self.model, self.model_str)
+        self.bb = BaselineBuilder(
+            self.model_str, 33, self.token_emb_helper, self.cls_emb, self.sep_emb, self.pad_emb, DEV
+        )
 
-        # sentence = "This has been the worst movie in the history of movies, maybe ever."
-        sentence = "One two three four five six seven eight nine ten"
+        sentence = "good movie ."
         self.inputs_tok = self.tokenizer(sentence, padding=True, return_tensors="pt")
-        assert self.inputs_tok["input_ids"].shape == (1, 12)
+        assert self.inputs_tok["input_ids"].shape == (1, 5)
 
-        # this has not really gone through the model but this does not matter for the tests,
-        # we just need an embedding:
         self.input_emb = construct_word_embedding(
             self.model, self.model_str, self.inputs_tok["input_ids"]
         )
-        assert self.input_emb.shape == (1, 12, 768)
+        assert self.input_emb.shape == (1, 5, 768)
+        self.baseline = self.bb.build_baseline(self.input_emb, b_type="pad_embed").to(DEV)
 
     def test_get_closest_by_token_emb(self):
         # test whether an actual embedding of a word is returned from the closest by function as one would expect, since the distance is 0
@@ -57,3 +76,49 @@ class TestTokenEmbeddingHelper(unittest.TestCase):
         corresponding_tok_id = self.inputs_tok["input_ids"][0, 2].item()
 
         self.assertTrue(torch.equal(emb, self.token_emb_helper.get_emb(corresponding_tok_id)))
+
+    def test_top_3_distances(self):
+        emb = self.input_emb[0][1].clone()
+        corresponding_tok_id = self.inputs_tok["input_ids"][0, 1]
+
+        top3 = self.token_emb_helper.get_topk_closest_by_token_embed_for_embed(
+            topk=3, embedding=emb, tokenizer=self.tokenizer
+        )
+        top10 = self.token_emb_helper.get_topk_closest_by_token_embed_for_embed(
+            topk=10, embedding=emb, tokenizer=self.tokenizer
+        )
+
+        # check whether top3 has only smaller values than top10 after the first 3 elements
+        for x, y in itertools.product(
+            [dist for _, dist, __ in top3], [dist for _, dist, __ in top10[3:]]
+        ):
+            self.assertTrue(x < y)
+
+    def test_top3_distances_from_good_to_pad(self):
+        # tests whehter the discretized word path for IG is correctly built, by reassuring the discretized token has the shortest distance to the interpolation embedding
+        ig = CustomIntegratedGradients(partial(nn_forward_fn, self.model, self.model_str))
+        (attrs,), (word_paths,) = ig._attribute(
+            inputs=self.input_emb, baselines=self.baseline, n_steps=10, method="riemann_trapezoid"
+        )
+        wp_disc_emb = defaultdict(list)
+        for word_path in word_paths:
+            for i, word in enumerate(word_path):
+                wp_disc_emb[i].append(
+                    self.token_emb_helper.get_closest_by_token_embed_for_embed(word)
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
+        wp_disc_actual_words = {
+            i: self.tokenizer.convert_ids_to_tokens(
+                [self.token_emb_helper.get_token_id(word) for word in word_path]
+            )
+            for i, word_path in wp_disc_emb.items()
+        }
+        wp_disc_token_ids = {
+            i: [self.token_emb_helper.get_token_id(word) for word in word_path]
+            for i, word_path in wp_disc_emb.items()
+        }
+        for j, word_emb in enumerate(word_paths[:, 1, :]):
+            top3 = self.token_emb_helper.get_topk_closest_by_token_embed_for_embed(3, word_emb, self.tokenizer)
+            self.assertTrue(top3[0][0] == wp_disc_token_ids[1][j])
