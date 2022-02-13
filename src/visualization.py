@@ -25,43 +25,62 @@ def visualize_attrs(
     fig, axs = plt.subplots(
         num_bbs, 1, sharex=True, squeeze=False, figsize=(16, 9), gridspec_kw={"hspace": 0}
     )
-    axins1 = inset_axes(
-        axs[0, 0],
-        width="100%",
-        height="100%",
-        # loc="upper right",
-        bbox_to_anchor=(0.78, 1.4, 0.2, 0.1),
-        bbox_transform=axs[0, 0].transAxes,
-    )
+    # color legend:
+    # axins1 = inset_axes(
+    #     axs[0, 0],
+    #     width="100%",
+    #     height="100%",
+    #     bbox_to_anchor=(0.78, 1.4, 0.2, 0.1),
+    #     bbox_transform=axs[0, 0].transAxes,
+    # )
     x_indices = range(len(token_words))
-    pal = sns.color_palette("summer", len(token_words))
+    # pal = sns.color_palette("coolwarm")
+    pal = cm.get_cmap("coolwarm")
 
     # loop over different input sentences:
     for i, (bl_name, attrs) in enumerate(bl_attrs.items()):
+        attrs = attrs / np.max(np.abs(attrs))
         df = pd.DataFrame(attrs, columns=["attr"])
-        rank = df.rank(axis=0, method="min", ascending=False)["attr"].to_numpy(dtype=np.int8)
+        # rank = df.rank(axis=0, method="min", ascending=False)["attr"].to_numpy(dtype=np.int8)
         sns.barplot(
             x=df.index,
             y="attr",
             data=df,
-            palette=np.array(pal)[rank],
+            palette=pal((attrs + 1) / 2),
             # hue="attr",
             ax=axs[i, 0],
             orient="v",
+            zorder=10,
         )
         axs[i, 0].set_xticks(x_indices)
-        # ax.set_yticks(token_words)
         axs[i, 0].set_xticklabels(token_words, rotation=30, ha="right")
-        axs[i, 0].set_ylabel(bl_name, rotation=0, ha="right")
+        axs[i, 0].set_ylabel(bl_name, rotation=30, ha="right")
+
+        # set background color
+        axs[i, 0].axhspan(facecolor="#DADADA", alpha=0.4, ymin=-1, ymax=1, zorder=-1)
+
+        # hide frame
+        axs[i, 0].spines["top"].set_visible(False)
+        axs[i, 0].spines["bottom"].set_visible(False)
+
+        # unify y axis
+        axs[i, 0].set_ylim([-1.1, 1.1])
+        axs[i, 0].set_yticks([0])
+
+        # x axis line:
+        axs[i, 0].axhline(0, color="black", linewidth=0.8, zorder=11)
+
+    axs[0, 0].spines["top"].set_visible(True)
+    axs[-1, 0].spines["bottom"].set_visible(True)
 
     # axs[0, 0].legend()
-    cbar = fig.colorbar(
-        cm.ScalarMappable(norm=None, cmap="summer"),
-        cax=axins1,
-        orientation="horizontal",
-        ticks=[0, 1],
-    )
-    cbar.ax.set_xticklabels(["high rank", "low rank"])
+    # cbar = fig.colorbar(
+    #     cm.ScalarMappable(norm=None, cmap="summer"),
+    #     cax=axins1,
+    #     orientation="horizontal",
+    #     ticks=[0, 1],
+    # )
+    # cbar.ax.set_xticklabels(["high rank", "low rank"])
     fig.text(
         0.5,
         0.95,
@@ -69,12 +88,12 @@ def visualize_attrs(
         ha="center",
         fontsize=16,
     )
-    plt.suptitle(f"sentence: {sentence}\nPrediction: {prediction}", y=0.05)
+    plt.suptitle(f"sentence: {sentence}\nPrediction: {prediction}", y=0.05, fontsize=16)
     # plt.tight_layout()
     if save_str is not None:
         if not save_str.endswith(".png"):
             save_str += ".png"
-        plt.savefig(Path("figures") / Path(save_str))
+        plt.savefig(Path("figures/attributions") / Path(save_str))
     else:
         plt.show()
 
@@ -137,7 +156,7 @@ def visualize_ablation_scores(
     if save_str is not None:
         if not save_str.endswith(".png"):
             save_str += ".png"
-        plt.savefig(Path("figures") / Path(save_str))
+        plt.savefig(Path("figures/ablation") / Path(save_str))
     else:
         plt.show()
 
@@ -220,7 +239,7 @@ def visualize_word_paths(
     if save_str is not None:
         if not save_str.endswith(".png"):
             save_str += ".png"
-        plt.savefig(Path("figures") / Path(save_str))
+        plt.savefig(Path("figures/wordpath") / Path(save_str))
     else:
         plt.show()
 
@@ -258,7 +277,7 @@ def visualize_word_path(
     if save_str is not None:
         if not save_str.endswith(".png"):
             save_str += ".png"
-        plt.savefig(Path("figures") / Path(save_str))
+        plt.savefig(Path("figures/wordpath") / Path(save_str))
     else:
         plt.show()
 
@@ -290,6 +309,6 @@ def visualize_word_path_table(
     if save_str is not None:
         if not save_str.endswith(".png"):
             save_str += ".png"
-        plt.savefig(Path("figures") / Path(save_str))
+        plt.savefig(Path("figures/wordpath_table") / Path(save_str))
     else:
         plt.show()

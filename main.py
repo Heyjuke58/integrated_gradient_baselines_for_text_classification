@@ -65,7 +65,15 @@ def main(
     :param baselines: list of
     :param models: keys for MODEL_STRS. What models should be used for classification and to be explained.
     """
-    dataset = load_dataset("glue", "sst2", split="test")
+    # dataset = load_dataset("glue", "sst2", split="test")
+    dataset = load_dataset("gpt3mix/sst2", split="test")
+    # switch label class since gpt3mix has flipped class labels compared to what the models are trained on
+    label = [0 if l == 1 else 1 for l in dataset["label"]]
+    dataset = dataset.map(
+        lambda l, t: {"label": 0, "text": t} if l == 1 else {"label": 1, "text": t},
+        input_columns=["label", "text"],
+    )
+    # dataset.map(lambda l: [0] if l[0] == 1 else [1], input_columns="label")
     print(DEV)
 
     for model_str in models:
@@ -95,6 +103,7 @@ def main(
         # choose IG version
         ig: Union[CustomIntegratedGradients, DiscretizedIntegratedGradients]
         if version_ig == "ig":
+            # return all logits since the target is not known
             ig = CustomIntegratedGradients(partial(nn_forward_fn, model, model_str))
         elif version_ig == "dig":
             ig = DiscretizedIntegratedGradients(partial(nn_forward_fn, model, model_str))
@@ -112,7 +121,8 @@ def main(
 
         print(f"USED EXAMPLES:")
         [
-            print(f"[{stringify_label(dataset[example]['label'])}]: {dataset[example]['sentence']}")
+            # print(f"[{stringify_label(dataset[example]['label'])}]: {dataset[example]['sentence']}")
+            print(f"[{stringify_label(dataset[example]['label'])}]: {dataset[example]['text']}")
             for example in examples
         ]
 
@@ -147,12 +157,14 @@ def main(
         for example in examples:
             print(f"EXAMPLE: {example}")
             x = dataset[example]
-            input = tokenizer(x["sentence"], padding=True, return_tensors="pt").to(DEV)
+            # input = tokenizer(x["sentence"], padding=True, return_tensors="pt").to(DEV)
+            input = tokenizer(x["text"], padding=True, return_tensors="pt").to(DEV)
             input_ids = input["input_ids"][0].cpu()
             # skip too long sentences for word path viz
-            if len(input_ids) > 8:
-                print(f"skipped {example}")
-                continue
+            # if len(input_ids) > 8:
+            #     print(f"skipped {example}")
+            #     continue
+
             words = tokenizer.convert_ids_to_tokens(list(map(int, input_ids)))
             # formatted_input = (input["input_ids"], input["attention_mask"])
             input_emb = construct_word_embedding(model, model_str, input["input_ids"]).to(DEV)
@@ -174,9 +186,10 @@ def main(
                 if version_ig == "ig":
                     # attribution for a sentence
                     # riemann_trapezoid is necessary, since this gives us alphas including 0 and 1
-                    (attrs,), (word_paths,) = ig._attribute(
+                    (attrs,), (word_paths,) = ig.attribute(
                         inputs=input_emb,
                         baselines=baseline,
+                        target=x["label"],
                         n_steps=steps,
                         method="riemann_trapezoid",
                     )
@@ -216,7 +229,7 @@ def main(
                             pca,
                             model_str,
                             version_ig,
-                            save_str=f"wordpath_ig_{model_str}_{baseline_str}_{example}.png",
+                            save_str=f"ig_{model_str}_{baseline_str}_{example}.png",
                         )
                         visualize_word_path_table(
                             [wp_disc_actual_words[i] for i in range(1, last_word)],
@@ -283,7 +296,7 @@ def main(
                             pca,
                             model_str,
                             version_ig,
-                            save_str=f"wordpath_dig_{model_str}_{baseline_str}_{example}.png",
+                            save_str=f"dig_{model_str}_{baseline_str}_{example}.png",
                         )
                         visualize_word_path_table(
                             [wp_disc_actual_words[i][::-1] for i in range(1, last_word)],
@@ -298,7 +311,8 @@ def main(
                     )
 
                 # sum of cumulative gradients:
-                summed_attrs = torch.sum(torch.abs(attrs), dim=2).squeeze(0)
+                summed_attrs = torch.sum(attrs, dim=2).squeeze(0)
+                # summed_attrs = torch.sum(torch.abs(attrs), dim=2).squeeze(0)
                 bl_attrs[baseline_str] = summed_attrs.detach().cpu().numpy()
 
             if viz_topk:
@@ -328,7 +342,14 @@ def main(
                         )
             if viz_attr:
                 visualize_attrs(
-                    bl_attrs, prediction_str, model_str, version_ig, x["sentence"], words
+                    bl_attrs,
+                    prediction_str,
+                    model_str,
+                    version_ig,
+                    x["text"],
+                    # x["sentence"],
+                    words,
+                    save_str=f"{model_str}_{example}.png",
                 )
         if viz_topk:
             avg_comps: Dict[str, Dict[float, float]] = get_avg_scores(comps)

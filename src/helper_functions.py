@@ -60,7 +60,7 @@ def nn_forward_fn(
     attention_mask=None,
     position_embed=None,
     type_embed=None,
-    return_all_logits=False,
+    return_all_logits=True,
 ):
     # embeds = input_embed + position_embed
     embeds = input_embed

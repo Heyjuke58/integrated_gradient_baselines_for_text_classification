@@ -91,7 +91,8 @@ def replace_k_percent(attr: Tensor, k: float, replacement_emb: Tensor, input_emb
     num_replace = round(
         (attr.shape[0] - 2) * k
     )  # minus 2, since cls and sep token should not count to the number of tokens for the ablation
-    indices_replace = torch.topk(attr, num_replace).indices
+    # TODO no idea how to choose topk with pos and neg values
+    indices_replace = torch.topk(torch.abs(attr), num_replace).indices
     assert 0 not in indices_replace, "Should not replace CLS embedding"
     assert attr.shape[0] - 1 not in indices_replace, "Should not replace SEP embedding"
     replaced_embed[0, indices_replace] = replacement_emb

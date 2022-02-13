@@ -1,7 +1,8 @@
 # Byte-compiled / optimized / DLL files
 knn
 .vscode
-figures/*
+figures/*/*
+figures_old/*
 __pycache__/
 *.py[cod]
 *$py.class
