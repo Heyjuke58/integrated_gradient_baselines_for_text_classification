@@ -87,6 +87,7 @@ def visualize_attrs(
     plt.suptitle(f"True: {true} Prediction: {prediction}", y=0.03, fontsize=20)
     # plt.tight_layout()
     if save_str is not None:
+        Path("figures/attributions").mkdir(parents=True, exist_ok=True)
         if not save_str.endswith(".png"):
             save_str += ".png"
         plt.savefig(Path("figures/attributions") / Path(save_str), bbox_inches="tight")
@@ -163,6 +164,7 @@ def visualize_ablation_scores(
     )
 
     if save_str is not None:
+        Path("figures/ablation").mkdir(parents=True, exist_ok=True)
         if not save_str.endswith(".png"):
             save_str += ".png"
         plt.savefig(Path("figures/ablation") / Path(save_str), bbox_inches="tight")
@@ -260,6 +262,7 @@ def visualize_word_paths(
 
     plt.tight_layout()
     if save_str is not None:
+        Path("figures/wordpath").mkdir(parents=True, exist_ok=True)
         if not save_str.endswith(".png"):
             save_str += ".png"
         plt.savefig(Path("figures/wordpath") / Path(save_str), bbox_inches="tight")
@@ -302,6 +305,7 @@ def visualize_word_path(
             ax.annotate(word, (word_path_discretized_emb[i, 0], word_path_discretized_emb[i, 1]))
             last_word = word
     if save_str is not None:
+        Path("figures/wordpath").mkdir(parents=True, exist_ok=True)
         if not save_str.endswith(".png"):
             save_str += ".png"
         plt.savefig(Path("figures/wordpath") / Path(save_str), bbox_inches="tight")
@@ -343,6 +347,7 @@ def visualize_word_path_table(
     )
 
     if save_str is not None:
+        Path("figures/wordpath_table").mkdir(parents=True, exist_ok=True)
         if not save_str.endswith(".png"):
             save_str += ".png"
         plt.savefig(Path("figures/wordpath_table") / Path(save_str), bbox_inches="tight")
