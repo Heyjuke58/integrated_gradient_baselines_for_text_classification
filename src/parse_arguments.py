@@ -10,16 +10,16 @@ MODEL_STRS = {
 }
 BASELINE_STRS = {
     "pad_embed",
-    "zero_embed",
-    "furthest_embed",
+    "uniform",
+    "gaussian",
     "blurred_embed",
     "flipped_blurred_embed",
     "both_blurred_embed",
-    "uniform",
-    "gaussian",
-    "furthest_word",
     "avg_word_embed",
     "avg_word",
+    "furthest_embed",
+    "furthest_word",
+    "zero_embed",
 }
 DISCRETE_BASELINES = {"pad_embed", "furthest_word", "avg_word"}
 
@@ -39,7 +39,7 @@ def parse_arguments() -> Tuple[Any, ...]:
         "--baselines",
         type=str,
         dest="baselines",
-        default="furthest_embed,pad_embed,zero_embed,blurred_embed,flipped_blurred_embed,both_blurred_embed,uniform,gaussian",
+        default="pad_embed,uniform,gaussian,blurred_embed,flipped_blurred_embed,both_blurred_embed,avg_word_embed,avg_word,furthest_embed,furthest_word,zero_embed",
         # default="blurred_embed,flipped_blurred_embed,both_blurred_embed",
         help=f"Type of baseline to be used for Integrated Gradients or Discretized Integrated Gradients. Allowed values: {BASELINE_STRS}",
     )
@@ -128,8 +128,12 @@ def parse_arguments() -> Tuple[Any, ...]:
         args.models, possible_values=list(MODEL_STRS.keys()), arg_type="models"
     )
 
-    # baselines = lookup_string(BASELINE_STRS, args.baselines)
-    # models = lookup_string(MODEL_STRS, args.models)
+    # viz topk is for use with many samples:
+    if args.viz_topk:
+        assert not (
+            args.viz_attr or args.viz_word_path or args.viz_emb_space
+        ), "visualizations are not compatible with each other"
+        assert len(args.examples) >= 50, "top-k analysis is a quantitative measure (need n >= 50!)"
 
     return (
         args.examples,
@@ -155,7 +159,3 @@ def valid_parse(args_str: str, possible_values: List[str], arg_type: str) -> Lis
         ), f"{arg} is an invalid value for {arg_type}. Possible values are: {possible_values}"
 
     return args
-
-
-def lookup_string(table: Dict[str, Any], keys: List[str]) -> List[Any]:
-    return [table[key] for key in keys]

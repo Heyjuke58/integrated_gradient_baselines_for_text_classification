@@ -21,3 +21,6 @@ aus dem DIG paper:
 - average word embedding: durchschnitt aller embeddings aus dem vocabulary (möglicherweise gewichtet nach word frequency?)
 - average word: wie average word embedding, aber suche von dort aus das nächste echte wort
 - random word: take for each token a random word embedding
+
+## TODO
+- entfernte unused tokens erwähnen

@@ -28,6 +28,7 @@ from src.visualization import (
     visualize_embedding_space,
     visualize_word_path_table,
 )
+from src.test_model import test_model
 from src.dig import DiscretizedIntegratedGradients
 from src.monotonic_paths import scale_inputs
 from src.custom_ig import CustomIntegratedGradients
@@ -43,7 +44,7 @@ from src.token_embedding_helper import TokenEmbeddingHelper
 K = [0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 DEV = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# suppress missing font character warnings
+# suppress missing font character warnings from matplotlib for word paths
 warnings.filterwarnings("ignore")
 
 
@@ -65,15 +66,16 @@ def main(
     :param baselines: list of
     :param models: keys for MODEL_STRS. What models should be used for classification and to be explained.
     """
-    # dataset = load_dataset("glue", "sst2", split="test")
-    dataset = load_dataset("gpt3mix/sst2", split="test")
+    if viz_topk:  # shuffle because dataset is sorted by labels (mostly)
+        dataset = load_dataset("gpt3mix/sst2", split="test").shuffle(seed=0)
+    else:
+        dataset = load_dataset("gpt3mix/sst2", split="test")
     # switch label class since gpt3mix has flipped class labels compared to what the models are trained on
     label = [0 if l == 1 else 1 for l in dataset["label"]]
     dataset = dataset.map(
         lambda l, t: {"label": 0, "text": t} if l == 1 else {"label": 1, "text": t},
         input_columns=["label", "text"],
     )
-    # dataset.map(lambda l: [0] if l[0] == 1 else [1], input_columns="label")
     print(DEV)
 
     for model_str in models:
@@ -94,6 +96,10 @@ def main(
         )
 
         token_emb_helper = TokenEmbeddingHelper(model, model_str)
+
+        # check that model has good performance
+        # test_model(model, tokenizer, dataset, DEV)
+        # continue
 
         # plot histogram of embedding values (used later for furthest embeddings)
         # all_word_embeddings = get_word_embeddings(model, model_str, trim_unused=True)
@@ -121,9 +127,8 @@ def main(
 
         print(f"USED EXAMPLES:")
         [
-            # print(f"[{stringify_label(dataset[example]['label'])}]: {dataset[example]['sentence']}")
-            print(f"[{stringify_label(dataset[example]['label'])}]: {dataset[example]['text']}")
-            for example in examples
+            print(f"[{i} {stringify_label(dataset[example]['label'])}]: {dataset[example]['text']}")
+            for i, example in enumerate(examples)
         ]
 
         # PCA for word path and embedding space visualization
@@ -157,16 +162,15 @@ def main(
         for example in examples:
             print(f"EXAMPLE: {example}")
             x = dataset[example]
-            # input = tokenizer(x["sentence"], padding=True, return_tensors="pt").to(DEV)
             input = tokenizer(x["text"], padding=True, return_tensors="pt").to(DEV)
             input_ids = input["input_ids"][0].cpu()
+
             # skip too long sentences for word path viz
             # if len(input_ids) > 8:
             #     print(f"skipped {example}")
             #     continue
 
             words = tokenizer.convert_ids_to_tokens(list(map(int, input_ids)))
-            # formatted_input = (input["input_ids"], input["attention_mask"])
             input_emb = construct_word_embedding(model, model_str, input["input_ids"]).to(DEV)
             prediction = predict(model, input_emb, input["attention_mask"])
             prediction_probs = softmax(prediction, dim=1)
@@ -174,6 +178,7 @@ def main(
                 stringify_label(torch.argmax(prediction_probs).item())
                 + f" ({(torch.max(prediction_probs).item() * 100):.2f}%)"
             )
+            true_str = stringify_label(x["label"])
 
             bl_attrs = {}
             for baseline_str in baselines:
@@ -236,6 +241,7 @@ def main(
                             model_str,
                             version_ig,
                             baseline_str,
+                            save_str=f"ig_{model_str}_{baseline_str}_{example}.png",
                         )
                 elif version_ig == "dig":
                     # attributions for one single sentence
@@ -303,8 +309,11 @@ def main(
                             model_str,
                             version_ig,
                             baseline_str,
+                            save_str=f"dig_{model_str}_{baseline_str}_{example}.png",
                         )
-                    attrs = ig.attribute(scaled_features=scaled_features, n_steps=steps)
+                    attrs = ig.attribute(
+                        scaled_features=scaled_features, n_steps=steps, target=x["label"]
+                    )
                 else:
                     raise Exception(
                         f"IG version should be one of ['ig', 'dig']. Instead it is {version_ig}"
@@ -312,7 +321,6 @@ def main(
 
                 # sum of cumulative gradients:
                 summed_attrs = torch.sum(attrs, dim=2).squeeze(0)
-                # summed_attrs = torch.sum(torch.abs(attrs), dim=2).squeeze(0)
                 bl_attrs[baseline_str] = summed_attrs.detach().cpu().numpy()
 
             if viz_topk:
@@ -344,21 +352,29 @@ def main(
                 visualize_attrs(
                     bl_attrs,
                     prediction_str,
+                    true_str,
                     model_str,
                     version_ig,
                     x["text"],
-                    # x["sentence"],
                     words,
-                    save_str=f"{model_str}_{example}.png",
+                    save_str=f"{version_ig}_{model_str}_{example}.png",
                 )
         if viz_topk:
             avg_comps: Dict[str, Dict[float, float]] = get_avg_scores(comps)
             visualize_ablation_scores(
-                avg_comps, model_str, "comprehensiveness", len(examples), save_str=None
+                avg_comps,
+                model_str,
+                "comprehensiveness",
+                len(examples),
+                save_str=f"comp_{version_ig}_{model_str}_{len(examples)}.png",
             )
             avg_log_odds: Dict[str, Dict[float, float]] = get_avg_scores(log_odds)
             visualize_ablation_scores(
-                avg_log_odds, model_str, "log odds", len(examples), save_str=None
+                avg_log_odds,
+                model_str,
+                "log odds",
+                len(examples),
+                save_str=f"log_odds_{version_ig}_{model_str}_{len(examples)}.png",
             )
 
 

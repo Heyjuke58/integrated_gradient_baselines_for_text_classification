@@ -217,7 +217,6 @@ class BaselineBuilder:
         )
         avg_word = self.token_emb_helper.get_closest_by_token_embed_for_embed(avg_word_embed[0])
         return avg_word.expand(input_emb.shape)
-        # return torch.cat([avg_word] * input_emb.shape[0], dim=0)
 
     def _avg_word_embed(self, input_emb: Tensor) -> Tensor:
         """
@@ -226,15 +225,9 @@ class BaselineBuilder:
         """
 
         return BaselineBuilder.avg_word_embed(self.model, self.model_str).expand(input_emb.shape)
-        # return torch.cat(
-        #     [BaselineBuilder.avg_word_embed(self.model, self.model_str).unsqueeze(0)]
-        #     * input_emb.shape[0],
-        #     dim=1,
-        # )
 
     @staticmethod
     def avg_word_embed(model, model_str: str) -> Tensor:
         all_words = get_word_embeddings(model, model_str, trim_unused=True)
-        # all_words = torch.stack(list(self.token_emb_helper.token_to_emb.values()))
         avg_word_embed = torch.mean(all_words, dim=0)
         return avg_word_embed
