@@ -32,15 +32,8 @@ class TokenEmbeddingHelper:
         assert (
             embedding.shape == get_word_embeddings(self.model, self.model_str)[0].shape
         ), "Embedding tensor has invalid shape to get closest by real token embedding!"
-        min_dist = float("inf")
-        token_id: int = None
-        for i, word_embed in enumerate(get_word_embeddings(self.model, self.model_str)):
-            dist = torch.sqrt(torch.sum((word_embed - embedding) ** 2))
-            # dist = torch.cdist(word_embed, embedding) ** 2
-            if dist < min_dist:
-                min_dist = dist
-                token_id = i
-        return self.get_emb(token_id)
+        dists = torch.cdist(embedding.unsqueeze(0), get_word_embeddings(self.model, self.model_str))
+        return self.get_emb(torch.argmin(dists).item())
 
     def get_topk_closest_by_token_embed_for_embed(
         self, topk: int, embedding: Tensor, tokenizer

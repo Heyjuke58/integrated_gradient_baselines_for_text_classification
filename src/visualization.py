@@ -140,14 +140,19 @@ def visualize_ablation_scores(
     """
     Plots TopK ablations scores (either comprehensiveness or log odds) of explanations for a model
     """
-    # num_bbs = len(list(avg_scores.keys()))
     fig, ax = plt.subplots(1, 1, sharex=True, figsize=(19.20, 10.80), gridspec_kw={"hspace": 0})
+
+    # set cyclic color map
+    cm = plt.get_cmap("gist_rainbow")
+    NUM_COLORS = len(list(avg_scores.values()))
+    ax.set_prop_cycle(color=[cm(1.0 * i / NUM_COLORS) for i in range(NUM_COLORS)])
+
     for i, (bl_name, scores) in enumerate(avg_scores.items()):
         x = list(scores.keys())
         y = list(scores.values())
         ax.plot(x, y, label=bl_name, marker="o")
     ax.set_xticks(list(list(avg_scores.values())[0].keys()))
-    ax.set_xlabel("top k of tokens masked")
+    ax.set_xlabel("top-k % of tokens masked")
     ax.set_ylabel(ablation_str)
     ax.legend()
 
