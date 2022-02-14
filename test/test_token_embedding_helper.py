@@ -102,10 +102,14 @@ class TestTokenEmbeddingHelper(unittest.TestCase):
             self.assertTrue(x < y)
 
     def test_top3_distances_from_good_to_pad(self):
-        # tests whehter the discretized word path for IG is correctly built, by reassuring the discretized token has the shortest distance to the interpolation embedding
+        # tests whether the discretized word path for IG is correctly built, by reassuring the discretized token has the shortest distance to the interpolation embedding
         ig = CustomIntegratedGradients(partial(nn_forward_fn, self.model, self.model_str))
-        (attrs,), (word_paths,) = ig._attribute(
-            inputs=self.input_emb, baselines=self.baseline, n_steps=10, method="riemann_trapezoid"
+        (attrs,), (word_paths,) = ig.attribute(
+            inputs=self.input_emb,
+            baselines=self.baseline,
+            n_steps=10,
+            method="riemann_trapezoid",
+            target=0,
         )
         wp_disc_emb = defaultdict(list)
         for word_path in word_paths:

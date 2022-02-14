@@ -65,6 +65,14 @@ def main(
     :param examples: list of indices for samples from the sst2 validation set to be classified and explained.
     :param baselines: list of
     :param models: keys for MODEL_STRS. What models should be used for classification and to be explained.
+    :param version_ig: version of integrated gradients (either ig or dig).
+    :param dig_strategy: strategy of dig (either greedy or maxcount) s. DIG paper for details.
+    :param steps: number of interpolation steps.
+    :param seed: seed for probabilistic baselines
+    :param viz_attr: whether to visualize attributions
+    :param viz_topk: whehter to visiualize topk ablation evaluation
+    :param viz_word_path: whether to visualize the word path (PCA and table)
+    :param viz_emb_space: whether to visualize embeddding space of the vocabulary of the model by reducing the dimensionality to 2 with a PCA
     """
     if viz_topk:  # shuffle because dataset is sorted by labels (mostly)
         dataset = load_dataset("gpt3mix/sst2", split="test").shuffle(seed=0)
@@ -138,6 +146,7 @@ def main(
         )
         pca.fit(all_word_emb)
 
+        # visualizes the embeddding space of the vocabulary of the model by reducing the dimensionality to 2 with a PCA
         if viz_emb_space:
             visualize_embedding_space(
                 all_word_emb,
@@ -161,19 +170,18 @@ def main(
 
         for example in examples:
             print(f"EXAMPLE: {example}")
+
+            # preprocess input
             x = dataset[example]
             input = tokenizer(x["text"], padding=True, return_tensors="pt").to(DEV)
             input_ids = input["input_ids"][0].cpu()
-
-            # skip too long sentences for word path viz
-            # if len(input_ids) > 8:
-            #     print(f"skipped {example}")
-            #     continue
-
-            words = tokenizer.convert_ids_to_tokens(list(map(int, input_ids)))
+            words = tokenizer.convert_ids_to_tokens(
+                list(map(int, input_ids))
+            )  # actual words of the sentence
             input_emb = construct_word_embedding(model, model_str, input["input_ids"]).to(DEV)
             prediction = predict(model, input_emb, input["attention_mask"])
             prediction_probs = softmax(prediction, dim=1)
+            pred_label = torch.argmax(prediction_probs).item()
             prediction_str = (
                 stringify_label(torch.argmax(prediction_probs).item())
                 + f" ({(torch.max(prediction_probs).item() * 100):.2f}%)"
@@ -198,7 +206,9 @@ def main(
                         n_steps=steps,
                         method="riemann_trapezoid",
                     )
+                    # visualize the closest-by tokens of the interpolated path from baseline to input (PCA and table)
                     if viz_word_path:
+                        # construct discretized word path from interpolated path embeddings
                         wp_disc_emb = defaultdict(list)
                         for word_path in word_paths:
                             for i, word in enumerate(word_path):
@@ -217,6 +227,7 @@ def main(
                         # word_paths has shape of (steps, words, emb size)
                         # we visualize all words in one image:
                         last_word = word_paths.shape[1] - 1
+                        # visualization as PCA
                         visualize_word_paths(
                             np.swapaxes(
                                 np.asarray(
@@ -236,6 +247,7 @@ def main(
                             version_ig,
                             save_str=f"ig_{model_str}_{baseline_str}_{example}.png",
                         )
+                        # visualization as table
                         visualize_word_path_table(
                             [wp_disc_actual_words[i] for i in range(1, last_word)],
                             model_str,
@@ -243,12 +255,14 @@ def main(
                             baseline_str,
                             save_str=f"ig_{model_str}_{baseline_str}_{example}.png",
                         )
+
                 elif version_ig == "dig":
                     # attributions for one single sentence
                     attrs = []
                     baseline_ids = [
                         token_emb_helper.get_token_id(base_emb) for base_emb in baseline[0]
                     ]
+                    # scaled_features are the monotonized paths, word_paths are the paths consisting of untouched words (ids)
                     scaled_features, word_paths = scale_inputs(
                         input_ids,
                         baseline_ids,
@@ -257,9 +271,11 @@ def main(
                         steps=steps - 2,
                         strategy=dig_strategy,
                     )
+                    # visualize word paths in a table and in a PCA space:
                     if viz_word_path:
                         pca = PCA(n_components=2)
                         pca.fit(get_word_embeddings(model, model_str).detach().cpu().numpy())
+                        # words to print onto the PCA space for the untouched path:
                         wp_disc_actual_words = {
                             i: tokenizer.convert_ids_to_tokens(
                                 [
@@ -269,9 +285,7 @@ def main(
                             )
                             for i, word_path in enumerate(word_paths)
                         }
-                        # for i, wp in wp_disc_actual_words.items():
-                        #     if i != 0 and i != len(wp_disc_actual_words) - 1:
-                        #         wp.append(pad_emb.detach().cpu())
+                        # ... and their embeddings, to be put through the PCA:
                         wp_disc_emb = {
                             i: [
                                 token_emb_helper.get_emb(word.item()).detach().cpu().numpy()
@@ -323,6 +337,7 @@ def main(
                 summed_attrs = torch.sum(attrs, dim=2).squeeze(0)
                 bl_attrs[baseline_str] = summed_attrs.detach().cpu().numpy()
 
+            # calculations for topk ablations (for different k-percentages, compute comprehensiveness and log-odds):
             if viz_topk:
                 for baseline_str, attr in bl_attrs.items():
                     for k in K:
@@ -348,6 +363,7 @@ def main(
                                 prediction,
                             )
                         )
+            # visualization for attributions (bar chart with values for each word and each baseline):
             if viz_attr:
                 visualize_attrs(
                     bl_attrs,
@@ -359,6 +375,7 @@ def main(
                     words,
                     save_str=f"{version_ig}_{model_str}_{example}.png",
                 )
+        # visualization for topk ablations (comprehensiveness and log-odds):
         if viz_topk:
             avg_comps: Dict[str, Dict[float, float]] = get_avg_scores(comps)
             visualize_ablation_scores(

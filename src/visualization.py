@@ -8,6 +8,7 @@ from numpy import ndarray
 from pathlib import Path
 import seaborn as sns
 import pandas as pd
+from cycler import cycler
 
 
 # plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
@@ -141,17 +142,20 @@ def visualize_ablation_scores(
     """
     Plots TopK ablations scores (either comprehensiveness or log odds) of explanations for a model
     """
-    fig, ax = plt.subplots(1, 1, sharex=True, figsize=(19.20, 10.80), gridspec_kw={"hspace": 0})
+    fig, ax = plt.subplots(1, 1, sharex=True, figsize=(9.60, 10.80), gridspec_kw={"hspace": 0})
 
-    # set cyclic color map
-    cm = plt.get_cmap("gist_rainbow")
+    # set cyclic color map and linestyles to distinguish lines in plot
+    cm = plt.get_cmap("viridis")
     NUM_COLORS = len(list(avg_scores.values()))
-    ax.set_prop_cycle(color=[cm(1.0 * i / NUM_COLORS) for i in range(NUM_COLORS)])
+    default_cycler = cycler(color=[cm(1.0 * i / NUM_COLORS) for i in range(NUM_COLORS)]) + cycler(
+        linestyle=(["-", "--", ":", "-."] * NUM_COLORS)[0:NUM_COLORS]
+    )
+    ax.set_prop_cycle(default_cycler)
 
     for i, (bl_name, scores) in enumerate(avg_scores.items()):
         x = list(scores.keys())
         y = list(scores.values())
-        ax.plot(x, y, label=bl_name, marker="o")
+        ax.plot(x, y, label=bl_name, marker="o", linewidth=2)
     ax.set_xticks(list(list(avg_scores.values())[0].keys()))
     ax.set_xlabel("top-k % of tokens masked")
     ax.set_ylabel(ablation_str)
